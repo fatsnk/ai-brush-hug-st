@@ -1,0 +1,12 @@
+node_modules/
+extension-dist/
+dist-preview/
+.release-artifacts/
+release-import.zip
+.env
+.env.*
+server/linghuashi-storage/allowed-accounts.json
+*.log
+*.pem
+*.key
+.DS_Store

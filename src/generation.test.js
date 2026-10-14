@@ -1,0 +1,255 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import JSZip from 'jszip';
+import {
+  GenerationQueue, GenerationError, submitGeneration, downloadResults,
+  buildNovelAIRequest, imageDescriptors, readLimited, cancelComfyPending, wait,
+} from './generation.js';
+
+const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRXYAAAAASUVORK5CYII=', 'base64');
+const json = (body, status = 200, headers = {}) => new Response(JSON.stringify(body), {
+  status, headers: { 'content-type': 'application/json', ...headers },
+});
+const job = (provider = 'openai') => ({
+  controller: new AbortController(),
+  plan: {
+    provider, url: 'https://api.example/v1/images/generations', base: 'https://comfy.example',
+    headers: { Authorization: 'Bearer test-secret' }, body: { model: 'test', prompt: 'lake' },
+  },
+});
+const eventually = async (check) => {
+  for (let i = 0; i < 100; i++) { if (check()) return; await wait(5); }
+  assert.fail('Expected state was not reached');
+};
+const plan = () => ({ provider: 'openai', model: 'test', headers: { Authorization: 'test-secret' }, body: {}, timeout: 5 });
+
+test('missing advanced assets fail before submission marker and provider request', async () => {
+  const current = job();
+  let checkpoints = 0, calls = 0;
+  current.preparePayload = async () => { throw new Error('missing asset'); };
+  current.checkpoint = async () => checkpoints++;
+  await assert.rejects(submitGeneration(current, async () => { calls++; return json({}); }), /missing asset/);
+  assert.equal(calls, 0); assert.equal(checkpoints, 0); assert.equal(current.execution, undefined);
+});
+
+test('cancellation during reference preparation never marks or submits a paid request', async () => {
+  const current = job();
+  let checkpoints = 0, calls = 0;
+  current.preparePayload = async () => { current.controller.abort(); return {}; };
+  current.checkpoint = async () => checkpoints++;
+  await assert.rejects(submitGeneration(current, async () => { calls++; return json({}); }), { name: 'AbortError' });
+  assert.equal(calls, 0); assert.equal(checkpoints, 0);
+});
+
+test('prepared OpenAI edit multipart retains automatic boundary and accepted recovery skips preparation', async () => {
+  const current = job(), form = new FormData();
+  form.append('model', 'gpt-image-1'); form.append('image', new Blob([png], { type: 'image/png' }), 'source.png');
+  let preparations = 0, calls = 0;
+  current.preparePayload = async () => { preparations++; return form; };
+  await submitGeneration(current, async (url, options) => {
+    calls++; assert.equal(options.body, form);
+    assert.equal(options.headers['Content-Type'], undefined);
+    assert.equal(options.headers.Authorization, 'Bearer test-secret');
+    return json({ data: [{ b64_json: png.toString('base64') }] });
+  });
+  await submitGeneration(current, () => assert.fail('unexpected resubmission'));
+  assert.equal(preparations, 1); assert.equal(calls, 1);
+});
+
+test('OpenAI collects every base64 result and submits once', async () => {
+  const current = job();
+  let posts = 0;
+  const fetcher = async (url, options) => {
+    posts++;
+    assert.equal(options.method, 'POST');
+    assert.equal(options.credentials, 'omit');
+    assert.equal(options.redirect, 'error');
+    return json({ data: [{ b64_json: png.toString('base64'), seed: 12 }, { b64_json: png.toString('base64'), seed: 13 }] });
+  };
+  await submitGeneration(current, fetcher);
+  await submitGeneration(current, fetcher);
+  const images = await downloadResults(current, fetcher);
+  assert.equal(posts, 1);
+  assert.equal(images.length, 2);
+  assert.equal(images[1].seed, 13);
+  assert.equal(images[0].blob.type, 'image/png');
+});
+
+test('CDN download receives no API key, and recovery never resubmits', async () => {
+  const current = job();
+  let posts = 0, downloads = 0;
+  const fetcher = async (url, options) => {
+    if (options.method === 'POST') { posts++; return json({ data: [{ url: 'https://cdn.example/image.png?sig=temporary' }] }); }
+    downloads++;
+    assert.deepEqual(options.headers, {});
+    if (downloads === 1) throw new TypeError('test-secret must never reach a log');
+    return new Response(png);
+  };
+  await submitGeneration(current, fetcher);
+  await assert.rejects(downloadResults(current, fetcher), TypeError);
+  await submitGeneration(current, fetcher);
+  assert.equal((await downloadResults(current, fetcher)).length, 1);
+  assert.equal(posts, 1);
+  assert.equal(downloads, 2);
+});
+
+test('NAI ZIP keeps all images and validates their bytes', async () => {
+  const zip = new JSZip();
+  zip.file('one.png', png); zip.file('two.png', png); zip.file('info.txt', 'metadata');
+  const results = await imageDescriptors(await zip.generateAsync({ type: 'uint8array' }));
+  assert.equal(results.length, 2);
+  zip.file('bad.png', 'not an image');
+  await assert.rejects(imageDescriptors(await zip.generateAsync({ type: 'uint8array' })), /不是 PNG/);
+});
+
+test('NAI request carries negative caption, real seed, model and options', () => {
+  const params = {
+    model: 'nai-diffusion-4-5-full', artist: 'artist', positive: 'lake', negative: 'blurry',
+    width: 832, height: 1216, steps: 23, scale: 5, seed: 0,
+    sampler: 'k_euler_ancestral', nSamples: 2, ucPreset: '0', qualityTags: true,
+    cfgRescale: 0.2, noiseSchedule: 'karras', variety: true,
+  };
+  const request = buildNovelAIRequest(params);
+  assert.equal(request.input, 'artist, lake');
+  assert.equal(request.parameters.seed, 0);
+  assert.equal(request.parameters.n_samples, 2);
+  assert.equal(request.parameters.v4_negative_prompt.caption.base_caption, 'blurry');
+  assert.equal(request.parameters.skip_cfg_above_sigma, 19);
+  const v3 = buildNovelAIRequest({ ...params, model: 'nai-diffusion-3', sm: true, smDyn: false });
+  assert.equal(v3.parameters.sm, true);
+  assert.equal(v3.parameters.v4_prompt, undefined);
+});
+
+test('ComfyUI uses returned prompt ID and selected output; view is authenticated', async () => {
+  const current = job('comfyui');
+  current.plan.outputNode = '9';
+  const calls = [];
+  const fetcher = async (url, options) => {
+    calls.push(url);
+    if (options.method === 'POST') return json({ prompt_id: 'own-id' });
+    if (url.includes('/history/')) return json({
+      'own-id': { status: { completed: true, status_str: 'success' }, outputs: {
+        '8': { images: [{ filename: 'excluded.png' }] },
+        '9': { images: [{ filename: 'one.png', subfolder: 'folder with space' }, { filename: 'two.png' }] },
+      } },
+    });
+    assert.equal(options.headers.Authorization, 'Bearer test-secret');
+    return new Response(png);
+  };
+  await submitGeneration(current, fetcher);
+  const results = await downloadResults(current, fetcher);
+  assert.equal(results.length, 2);
+  assert(calls.includes('https://comfy.example/history/own-id'));
+  assert.equal(calls.filter((url) => url.includes('excluded')).length, 0);
+  assert(calls.some((url) => url.includes('folder+with+space')));
+});
+
+test('ComfyUI cancellation deletes own queued ID and never calls global interrupt', async () => {
+  const current = job('comfyui');
+  current.execution = { promptId: 'own-id' };
+  const calls = [];
+  await cancelComfyPending(current, async (url, options) => { calls.push([url, JSON.parse(options.body)]); return json({}); });
+  assert.deepEqual(calls, [['https://comfy.example/queue', { delete: ['own-id'] }]]);
+});
+
+test('ComfyUI execution errors do not become empty successful batches', async () => {
+  const current = job('comfyui');
+  current.execution = { promptId: 'own-id' };
+  await assert.rejects(downloadResults(current, async () => json({
+    'own-id': { status: { completed: true, status_str: 'error' }, outputs: {} },
+  })), /执行失败/);
+});
+
+test('authentication and rate errors are classified without response body secrets', async () => {
+  for (const status of [401, 403, 429]) {
+    const current = job();
+    await assert.rejects(submitGeneration(current, async () => json({ error: 'test-secret' }, status, { 'retry-after': '2' })), (error) => {
+      assert.equal(error.status, status);
+      assert(!error.message.includes('test-secret'));
+      if (status === 429) assert.equal(error.cooldown, 2000);
+      return true;
+    });
+    assert.equal(current.execution, undefined);
+  }
+});
+
+test('oversized and nonimage responses are rejected', async () => {
+  await assert.rejects(readLimited(new Response('large', { headers: { 'content-length': '30' } }), 20), /响应过大/);
+  await assert.rejects(imageDescriptors(new TextEncoder().encode('not an image')), /不是图片/);
+  const current = job();
+  current.execution = { bytes: new TextEncoder().encode(JSON.stringify({ data: [{ url: 'data:text/html,bad' }] })) };
+  await assert.rejects(downloadResults(current), /地址不可使用/);
+});
+
+test('queue cancellation and interval are applied after completion', async () => {
+  const starts = [];
+  const settings = { enabled: true, generationMode: 'queue', concurrency: 2, queueInterval: 0.04 };
+  const queue = new GenerationQueue({
+    settings: () => settings,
+    run: async (current) => { starts.push(Date.now()); await wait(12, current.controller.signal); },
+  });
+  const one = queue.add(plan());
+  const cancelled = queue.add(plan());
+  queue.cancel(cancelled.id);
+  const three = queue.add(plan());
+  await eventually(() => three.status === 'completed');
+  assert.equal(one.status, 'completed');
+  assert.equal(cancelled.status, 'cancelled');
+  assert.equal(starts.length, 2);
+  assert(starts[1] - starts[0] >= 45);
+  assert(!JSON.stringify(queue.records()).includes('test-secret'));
+});
+
+test('parallel limit and active cancellation free slots only when runner stops', async () => {
+  let active = 0, peak = 0;
+  const settings = { enabled: true, generationMode: 'parallel', concurrency: 2, queueInterval: 0 };
+  const queue = new GenerationQueue({
+    settings: () => settings,
+    run: async (current) => {
+      active++; peak = Math.max(peak, active);
+      try { await wait(20, current.controller.signal); } finally { active--; }
+    },
+  });
+  const jobs = [queue.add(plan()), queue.add(plan()), queue.add(plan())];
+  queue.cancel(jobs[0].id);
+  await eventually(() => jobs[2].status === 'completed');
+  assert.equal(peak, 2);
+  assert.equal(jobs[0].status, 'cancelled');
+  assert.equal(queue.running, 0);
+});
+
+test('manual recovery retains accepted execution, failed POST is never retried', async () => {
+  let calls = 0;
+  const settings = { enabled: true, generationMode: 'queue', concurrency: 1, queueInterval: 0 };
+  const queue = new GenerationQueue({
+    settings: () => settings,
+    run: async (current) => {
+      calls++;
+      if (calls === 1) { current.execution = { bytes: png }; throw new GenerationError('download failed'); }
+      assert(current.execution);
+    },
+  });
+  const current = queue.add(plan());
+  await eventually(() => current.status === 'failed');
+  queue.retry(current.id);
+  await eventually(() => current.status === 'completed');
+  assert.equal(current.attempts, 2);
+  assert.equal(current.execution, undefined);
+});
+
+test('429 cooldown pauses later queued tasks without automatically replaying failed one', async () => {
+  const starts = [];
+  const settings = { enabled: true, generationMode: 'queue', queueInterval: 0 };
+  const queue = new GenerationQueue({
+    settings: () => settings,
+    run: async () => {
+      starts.push(Date.now());
+      if (starts.length === 1) throw new GenerationError('limited', { status: 429, cooldown: 45 });
+    },
+  });
+  const first = queue.add(plan()), second = queue.add(plan());
+  await eventually(() => second.status === 'completed');
+  assert.equal(first.status, 'failed');
+  assert(starts[1] - starts[0] >= 40);
+  assert.equal(first.attempts, 1);
+});

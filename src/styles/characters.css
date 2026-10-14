@@ -1,0 +1,46 @@
+.character-toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
+.character-toolbar .assistant-actions { margin: 0; }
+.character-scope { display: flex; border-bottom: 1px solid var(--border); }
+.character-scope button { background: none; color: var(--muted); border: 0; border-bottom: 2px solid transparent; padding: 10px 12px; font: inherit; cursor: pointer; }
+.character-scope button[aria-pressed="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+.character-scope button:disabled { opacity: .45; cursor: default; }
+.character-workspace { display: grid; grid-template-columns: minmax(160px, .65fr) minmax(0, 2fr); align-items: start; gap: 24px; }
+.character-directory { display: grid; gap: 4px; max-height: 580px; overflow-y: auto; }
+.character-directory > button { display: flex; align-items: center; gap: 10px; min-height: 60px; background: none; border: 0; border-left: 3px solid transparent; padding: 10px; text-align: left; color: var(--text); font: inherit; cursor: pointer; }
+.character-directory > button[aria-pressed="true"] { background: var(--soft); border-left-color: var(--accent); }
+.character-directory svg { flex: none; width: 20px; height: 20px; }
+.character-directory span { min-width: 0; }
+.character-directory strong, .character-directory small { display: block; overflow-wrap: anywhere; }
+.character-directory small { color: var(--muted); font-size: 12px; margin-top: 4px; }
+.character-editor { border-left: 1px solid var(--border); padding-left: 24px; min-width: 0; }
+.character-editor .ui-field, .character-scene-row .ui-field { min-width: 0; margin: 0 0 12px; }
+.character-editor textarea, .character-editor input, .character-editor select, .character-scene-row input, .character-scene-row select { width: 100%; min-width: 0; }
+.character-editor textarea { resize: vertical; }
+.character-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.character-editor .settings-band-heading { margin: 20px 0 12px; flex-wrap: wrap; }
+.character-editor .settings-band-heading:first-child { margin-top: 0; }
+.character-outfit { display: grid; grid-template-columns: minmax(90px, .7fr) minmax(0, 1.5fr) 32px; gap: 10px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+.character-outfit .ui-icon-button { margin-top: 24px; }
+.character-selection { border-top: 1px solid var(--border); padding-top: 18px; margin-top: 22px; min-width: 0; }
+.character-selection .settings-band-heading { flex-wrap: wrap; gap: 8px; }
+.character-checks { display: flex; flex-wrap: wrap; gap: 10px 20px; margin: 14px 0; }
+.character-checks label, .character-auto { display: flex; align-items: center; gap: 8px; overflow-wrap: anywhere; font-size: 13px; }
+.character-checks input, .character-auto input { flex: none; width: 16px !important; height: 16px; margin: 0; accent-color: var(--accent); }
+.character-scene-row { border-bottom: 1px solid var(--border); padding: 12px 0; }
+.character-scene-row > strong { display: block; margin-bottom: 12px; overflow-wrap: anywhere; }
+.character-frozen { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-size: 12px; color: var(--muted); }
+.character-frozen > span { display: flex; align-items: center; gap: 6px; }
+.character-frozen svg { width: 16px; height: 16px; }
+@media (max-width: 700px) {
+  .character-workspace { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .character-directory { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 240px; border-bottom: 1px solid var(--border); }
+  .character-editor { border: 0; padding: 0; }
+  .character-toolbar { align-items: stretch; }
+  .character-toolbar .ui-button { padding: 7px 10px; }
+}
+@media (max-width: 420px) {
+  .character-form-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .character-outfit { grid-template-columns: minmax(0, 1fr) 32px; }
+  .character-outfit .ui-field:first-child { grid-column: 1 / -1; }
+  .character-selection .settings-label { max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
+}

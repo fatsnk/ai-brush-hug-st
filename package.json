@@ -1,0 +1,35 @@
+{
+  "name": "ai-brush-hug-st",
+  "version": "0.11.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "build:extension": "vite build --config vite.extension.config.js",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "node --test src/*.test.js server/linghuashi-storage/*.test.mjs",
+    "test:backup": "node --test src/backup.test.js server/linghuashi-storage/backup-records.test.mjs",
+    "package:release": "node scripts/package-release.mjs",
+    "test:generation": "node --test src/generation.test.js src/retention.test.js",
+    "test:advanced": "node --test src/advanced-generation.test.js server/linghuashi-storage/reference-assets.test.mjs",
+    "test:chat": "node --test src/chat.test.js",
+    "test:assistant": "node --test src/prompt-assistant.test.js",
+    "test:characters": "node --test src/character-profiles.test.js",
+    "test:versions": "node --test server/linghuashi-storage/versions.test.mjs",
+    "test:presets": "node --test src/credentials.test.js src/artist-library.test.js",
+    "test:storage": "node --test server/linghuashi-storage/storage.test.mjs server/linghuashi-storage/tasks.test.mjs",
+    "test:tasks": "node --test src/task-persistence.test.js server/linghuashi-storage/tasks.test.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ibome/ai-brush-hug-st.git"
+  },
+  "dependencies": {
+    "jszip": "3.10.1",
+    "lucide": "1.54.0"
+  },
+  "devDependencies": {
+    "vite": "8.3.4"
+  }
+}

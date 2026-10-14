@@ -1,0 +1,31 @@
+.image-editor { width: min(1080px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 32px); padding: 0; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); }
+.image-editor[open] { display: flex; flex-direction: column; }
+.image-editor::backdrop { background: #000000b3; }
+.image-editor header, .image-editor footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; flex-shrink: 0; }
+.image-editor header { border-bottom: 1px solid var(--border); }
+.image-editor h2 { font-size: 18px; margin: 0 0 4px; }
+.image-editor header span { font-size: 12px; color: var(--secondary); }
+.image-editor-body { display: grid; grid-template-columns: minmax(200px, .7fr) minmax(0, 1.3fr); gap: 24px; overflow: auto; padding: 20px; min-height: 0; }
+.image-editor-body > aside { min-width: 0; }
+.image-editor-body > aside > img { width: 100%; height: 300px; object-fit: contain; background: var(--soft); }
+.image-editor-body > aside > p { font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.image-editor fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.image-editor .ui-field { display: flex; flex-direction: column; gap: 7px; margin: 14px 0; font-size: 12px; }
+.image-editor input, .image-editor select, .image-editor textarea { min-width: 0; max-width: 100%; width: 100%; padding: 9px 10px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg); color: var(--text); font: inherit; }
+.image-editor textarea { resize: vertical; line-height: 1.6; }
+.image-editor input[type="checkbox"] { width: 16px; }
+.image-editor .nai-preset-state, .image-editor .openai-model-control button, .image-editor .openai-model-summary, .image-editor .openai-model-panel { display: none; }
+.image-edit-roles { margin-top: 20px; border-top: 1px solid var(--border); padding-top: 12px; }
+.image-edit-roles h3 { font-size: 14px; }
+.image-edit-roles > div { border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+.image-edit-assistant { border-top: 1px solid var(--border); margin-top: 16px; padding-top: 6px; }
+.image-editor footer { border-top: 1px solid var(--border); flex-wrap: wrap; }
+.image-editor footer > div { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+.image-edit-status { color: var(--danger); font-size: 12px; overflow-wrap: anywhere; max-width: 100%; }
+@media (max-width: 720px) {
+  .image-editor { width: 100vw; height: 100dvh; max-height: none; margin: 0; border-radius: 0; }
+  .image-editor-body { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 14px; }
+  .image-editor-body > aside > img { height: 180px; }
+  .image-editor header, .image-editor footer { padding: 12px 14px; }
+  .image-editor .two-field-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

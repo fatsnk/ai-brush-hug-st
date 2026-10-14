@@ -1,0 +1,87 @@
+import { assistantModelNames } from './prompt-assistant.js';
+
+const STATUS_SOURCES = new Set(['openai', 'openrouter', 'mistralai', 'custom', 'cohere', 'chutes',
+  'electronhub', 'nanogpt', 'deepseek', 'xai', 'aimlapi', 'pollinations', 'groq', 'moonshot',
+  'fireworks', 'makersuite', 'siliconflow', 'workers_ai']);
+const STATUS_FIELDS = ['reverse_proxy', 'proxy_password', 'custom_url', 'custom_include_headers',
+  'siliconflow_endpoint', 'minimax_endpoint', 'workers_ai_account_id'];
+const signature = (context) => JSON.stringify([context.mainApi, context.chatCompletionSettings?.chat_completion_source,
+  context.chatCompletionSettings?.custom_url, context.chatCompletionSettings?.reverse_proxy]);
+const loadTavernAPI = () => {
+  const url = new URL('/scripts/openai.js', globalThis.location.href);
+  return import(/* @vite-ignore */ url.href);
+};
+
+export function createTavernTextAccess({ getContext, fetcher = fetch,
+  loadAPI = loadTavernAPI, document = globalThis.document }) {
+  async function models({ refresh = false, signal } = {}) {
+    const context = getContext();
+    const before = signature(context);
+    if (context.mainApi !== 'openai') {
+      return { models: [], current: '', source: context.mainApi || '', signature: signature(context),
+        message: '当前酒馆使用文本补全接口，请切换到聊天补全接口后独立选择模型' };
+    }
+    const api = await loadAPI();
+    const settings = context.chatCompletionSettings || api.oai_settings || {};
+    const source = settings.chat_completion_source;
+    const current = (context.getChatCompletionModel || api.getChatCompletionModel)?.(settings) || '';
+    const selector = { makersuite: 'google', azure_openai: 'azure_openai' }[source] || source;
+    const options = document?.querySelectorAll?.(`#model_${selector}_select option`) || [];
+    const cached = assistantModelNames([...(api.model_list || []),
+      ...Array.from(options, (option) => option.value), current].filter(Boolean));
+    let list = cached, message = '';
+    if (refresh && STATUS_SOURCES.has(source)) {
+      const body = { chat_completion_source: source };
+      for (const key of STATUS_FIELDS) if (typeof settings[key] === 'string') body[key] = settings[key];
+      const response = await fetcher('/api/backends/chat-completions/status', {
+        method: 'POST', headers: context.getRequestHeaders(), credentials: 'same-origin', cache: 'no-store',
+        body: JSON.stringify(body), signal: signal
+          ? AbortSignal.any([signal, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000),
+      });
+      if (!response.ok) throw new Error(`酒馆模型列表读取失败（${response.status}）`);
+      const data = await response.json();
+      if (data.error) throw new Error('酒馆模型列表读取失败，请检查酒馆接口连接');
+      const received = assistantModelNames(data);
+      if (received.length) list = assistantModelNames([...received, current].filter(Boolean));
+      else message = '接口未返回模型列表，已保留酒馆可用模型';
+    } else if (refresh) message = '已读取酒馆模型选项；该接口未提供独立模型列表查询';
+    signal?.throwIfAborted();
+    if (signature(getContext()) !== before) throw new Error('酒馆接口已切换，请重新获取模型列表');
+    return { models: list, current, source, signature: before, message };
+  }
+
+  async function generate(messages, options, signal) {
+    const context = getContext();
+    if (!options.tavernModel.trim()) {
+      if (typeof context.generateRaw !== 'function') throw new Error('当前酒馆不支持跟随文字模型，请改用独立 API');
+      return context.generateRaw({ prompt: messages, responseLength: options.maxTokens, trimNames: false, quietToLoud: false });
+    }
+    if (context.mainApi !== 'openai') throw new Error('独立选模需要酒馆使用聊天补全接口');
+    const api = await loadAPI();
+    if (typeof api.createGenerationParameters !== 'function') throw new Error('当前酒馆版本不支持助手独立选模');
+    signal?.throwIfAborted();
+    // Build with a snapshot so model-specific parameters never alter the chat configuration.
+    const settings = structuredClone(context.chatCompletionSettings || api.oai_settings);
+    settings.openai_max_tokens = options.maxTokens;
+    settings.request_images = false;
+    const { generate_data } = await api.createGenerationParameters(settings, options.tavernModel.trim(), 'quiet', structuredClone(messages));
+    const body = { ...generate_data, model: options.tavernModel.trim(), stream: false };
+    delete body.tools;
+    delete body.tool_choice;
+    signal?.throwIfAborted();
+    const response = await fetcher('/api/backends/chat-completions/generate', {
+      method: 'POST', headers: context.getRequestHeaders(), credentials: 'same-origin', cache: 'no-store',
+      body: JSON.stringify(body), signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(options.timeout * 1000)]) : AbortSignal.timeout(options.timeout * 1000),
+    });
+    if (!response.ok) throw new Error(`酒馆文字请求失败（${response.status}）`);
+    const data = await response.json();
+    if (data.error) throw new Error('酒馆文字接口返回错误，请检查模型权限');
+    const content = typeof api.getStreamingReply === 'function'
+      ? api.getStreamingReply(data, {}, { chatCompletionSource: settings.chat_completion_source, overrideShowThoughts: false })
+      : data.choices?.[0]?.message?.content;
+    return typeof content === 'string' ? content : Array.isArray(content)
+      ? content.filter((part) => part.type === 'text').map((part) => part.text).join('') : '';
+  }
+  return { models, generate };
+}

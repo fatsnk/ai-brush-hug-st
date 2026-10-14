@@ -1,0 +1,419 @@
+import { icon, paintIcons } from './icons.js';
+import { pluginIcon } from './ui/branding.js';
+import { getCharacterTheme } from './ui/appearance.js';
+import { DEFAULT_CONFIG } from './config.js';
+import { createFloatingMenu } from './ui/floating-menu.js';
+import { createChatLink } from './chat-link.js';
+import { createCredentialVault } from './credential-vault.js';
+import { SETTINGS_DEFAULTS } from './ui/settings.js';
+import { createStorageRequest, STORAGE_ACTIONS } from './server-storage.js';
+import { createAssistantHost } from './assistant-host.js';
+import { chatIdentity } from './chat.js';
+import { RELEASE } from './release.js';
+
+const VERSION = RELEASE.version;
+const BUILD = RELEASE.build;
+const SETTINGS_KEY = 'linghuashi';
+const baseURL = new URL('.', import.meta.url).href;
+const getContext = () => window.SillyTavern?.getContext?.();
+const plainObject = (value) => value && typeof value === 'object' && !Array.isArray(value);
+const clone = (value) => JSON.parse(JSON.stringify(value));
+
+async function start() {
+  if (document.getElementById('linghuashi-extension-host')) return;
+  const context = getContext();
+  if (!context?.extensionSettings || typeof context.saveSettingsDebounced !== 'function') {
+    throw new Error('酒馆设置尚未就绪');
+  }
+  const response = await fetch('/api/users/me', { credentials: 'same-origin' });
+  if (!response.ok) throw new Error('酒馆账号无法读取');
+  const profile = await response.json();
+  if (typeof profile.handle !== 'string' || !profile.handle) throw new Error('酒馆账号无效');
+  const account = profile.handle;
+  const storageRequest = createStorageRequest(() => getContext()?.getRequestHeaders?.());
+  const credentialVault = createCredentialVault({
+    account, storage: localStorage,
+    request: async (action, body) => {
+      const headers = getContext()?.getRequestHeaders?.();
+      if (!headers) throw new Error('酒馆请求验证尚未就绪');
+      const response = await fetch(`/api/secrets/${action}`, {
+        method: 'POST', headers, credentials: 'same-origin', cache: 'no-store',
+        body: JSON.stringify(body), signal: AbortSignal.timeout(8000),
+      });
+      if (!response.ok) throw new Error(response.status === 403
+        ? '酒馆禁止读取秘钥，请重新填写' : '酒馆秘钥存储失败，请重试');
+      return response.status === 204 ? {} : response.json();
+    },
+  });
+  const saved = context.extensionSettings[SETTINGS_KEY];
+  let ui = plainObject(saved?.ui) ? clone(saved.ui) : {};
+  let layout = { ...DEFAULT_CONFIG, ...(plainObject(saved?.layout) ? clone(saved.layout) : {}), surface: 'console', state: 'ready' };
+  let frame;
+  let mounted = false;
+  let previousFocus;
+  let sizeTimer;
+  let drag;
+  let skipClick = false;
+  let destroyed = false;
+  let requestedPage = null;
+  let pendingFloatingBall = null;
+  let activeChat = chatContext();
+  let chatLink;
+  let frameReady;
+  let resolveFrame;
+  let rejectFrame;
+  let textGenerating = Boolean(context.streamingProcessor && !context.streamingProcessor.isFinished && !context.streamingProcessor.isStopped);
+  const assistantHost = createAssistantHost({ getContext, settings: () => ui.assistant,
+    post, isBusy: () => textGenerating });
+  const textStarted = (type, _options, dryRun) => {
+    if (!dryRun && type !== 'quiet') textGenerating = true;
+  };
+  const textEnded = () => { textGenerating = false; };
+  const textEvents = [['GENERATION_STARTED', textStarted], ['GENERATION_ENDED', textEnded], ['GENERATION_STOPPED', textEnded]]
+    .map(([key, handler]) => [context.eventTypes?.[key], handler]).filter(([type]) => type);
+  for (const [type, handler] of textEvents) context.eventSource?.on?.(type, handler);
+
+  function chatContext() {
+    const current = getContext();
+    const count = Array.isArray(current?.chat) ? current.chat.length : 0;
+    const group = current?.groupId ? current.groups?.find((item) => String(item.id) === String(current.groupId)) : null;
+    return { name: count ? String(group?.name || current?.name2 || '当前聊天').slice(0, 120) : '未打开聊天', count,
+      key: chatIdentity(current), avatars: group ? group.members || [] : [current?.characters?.[current.characterId]?.avatar].filter(Boolean) };
+  }
+
+  const host = document.createElement('div');
+  host.id = 'linghuashi-extension-host';
+  host.popover = 'manual';
+  document.body.append(host);
+  const shadow = host.attachShadow({ mode: 'open' });
+  shadow.innerHTML = `<style>
+    :host { all: initial; position: fixed; inset: 0; width: 100vw; height: 100dvh; margin: 0; padding: 0; border: 0; background: transparent; pointer-events: none; font: 14px "Segoe UI","Microsoft YaHei",sans-serif; color: #26334b; }
+    *, *::before, *::after { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    button { font: inherit; cursor: pointer; }
+    svg { width: 19px; height: 19px; pointer-events: none; }
+    button:focus-visible { outline: 3px solid #3672ce; outline-offset: 2px; }
+    .ball { position: fixed; z-index: 30000; right: 12px; bottom: 104px; display: grid; place-items: center; width: 76px; height: 76px; border: 0; border-radius: 50%; padding: 4px; background: transparent; box-shadow: none; overflow: visible; touch-action: none; pointer-events: auto; }
+    .ball:hover img { filter: brightness(1.06); }
+    .ball img { display: block; width: 100%; height: 100%; object-fit: contain; object-position: center; pointer-events: none; }
+    .backdrop { position: fixed; inset: 0; z-index: 30001; display: grid; place-items: center; padding: 20px; background: #12172488; pointer-events: auto; }
+    .window { width: min(1200px,100%); height: min(900px,calc(100dvh - 40px)); display: flex; flex-direction: column; background: #fbfcff; border: 1px solid #ced8e8; border-radius: 8px; overflow: hidden; }
+    .window.fullscreen { width: 100%; height: 100dvh; border-radius: 0; }
+    .backdrop:has(.fullscreen) { padding: 0; }
+    .toolbar { min-height: 40px; display: flex; align-items: center; gap: 8px; padding: 4px 8px 4px 14px; border-bottom: 1px solid #d4deed; background: #f3f6fc; }
+    .toolbar strong { font-size: 14px; font-weight: 600; }
+    .badge { font-size: 11px; color: #65728a; }
+    .toolbar .actions { display: flex; margin-left: auto; gap: 3px; }
+    .toolbar button { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: inherit; }
+    .toolbar button:hover { background: #dfe7f4; }
+    iframe { flex: 1; min-height: 0; width: 100%; border: 0; background: #fbfcff; }
+    .status { margin: 12px; color: #65728a; font-size: 13px; }
+    :host([data-theme="dark"]) .window { background: #1b1c20; border-color: #3a3d49; color: #e8ecf5; }
+    :host([data-theme="dark"]) .toolbar { background: #23242b; border-color: #3a3d49; }
+    :host([data-theme="dark"]) .badge { color: #a2aabc; }
+    :host([data-theme="dark"]) .toolbar button:hover { background: #343641; }
+    @media (max-width: 720px) { .backdrop { padding: 0; } .window { width: 100%; height: 100dvh; border-radius: 0; } .ball { width: 64px; height: 64px; padding: 3px; } }
+  </style>
+  <button class="ball" type="button" title="打开灵画师菜单" aria-label="打开灵画师菜单"></button>
+  <div class="backdrop" hidden>
+    <section class="window" role="dialog" aria-modal="true" aria-label="灵画师">
+      <header class="toolbar"><strong>灵画师</strong><span class="badge">生图工坊 · ${VERSION}</span>
+        <div class="actions">
+          <button type="button" data-action="theme" title="切换明暗主题" aria-label="切换明暗主题">${icon('moon')}</button>
+          <button type="button" data-action="fullscreen" title="切换全屏" aria-label="切换全屏">${icon('maximize-2')}</button>
+          <button type="button" data-action="close" title="关闭灵画师" aria-label="关闭灵画师">${icon('x')}</button>
+        </div>
+      </header>
+      <p class="status" role="status">正在载入…</p>
+    </section>
+  </div>`;
+  const ball = shadow.querySelector('.ball');
+  const backdrop = shadow.querySelector('.backdrop');
+  const dialog = shadow.querySelector('.window');
+  const status = shadow.querySelector('.status');
+  const floatingMenu = createFloatingMenu({
+    button: ball, container: shadow,
+    onSettings: () => open('settings'),
+    onHide: () => {
+      pendingFloatingBall = false;
+      ui.floatingBall = false;
+      persist();
+      post('linghuashi:floating', { visible: false });
+      updateAppearance();
+      shadow.activeElement?.blur();
+      if (openButton.getClientRects().length) openButton.focus({ preventScroll: true });
+    },
+  });
+
+  const entry = document.createElement('div');
+  entry.id = 'linghuashi-settings-entry';
+  entry.className = 'extension_container';
+  const openButton = document.createElement('button');
+  openButton.type = 'button';
+  openButton.className = 'menu_button menu_button_icon';
+  openButton.setAttribute('aria-label', '打开灵画师控制台');
+  openButton.innerHTML = `${icon('palette')}<span>灵画师</span>`;
+  entry.append(openButton);
+  paintIcons(entry);
+  openButton.querySelector('svg').style.cssText = 'width:18px;height:18px;flex:none';
+  const entryTarget = document.getElementById('extensions_settings') || document.getElementById('extensions_settings2');
+  if (entryTarget) entryTarget.append(entry);
+  else document.getElementById('extensionsMenu')?.append(entry);
+
+  function persist() {
+    if (destroyed) return;
+    const current = getContext();
+    current.extensionSettings[SETTINGS_KEY] = {
+      ...(plainObject(current.extensionSettings[SETTINGS_KEY]) ? current.extensionSettings[SETTINGS_KEY] : {}),
+      schemaVersion: 1, version: VERSION, ui: clone(ui), layout: clone(layout),
+    };
+    current.saveSettingsDebounced();
+  }
+
+  function updateAppearance() {
+    host.dataset.theme = layout.theme === 'dark' ? 'dark' : 'light';
+    const theme = getCharacterTheme(ui.characterTheme).id;
+    const selected = ball.querySelector('img')?.dataset.iconTheme;
+    if (selected !== theme) ball.innerHTML = pluginIcon(theme);
+    ball.hidden = ui.enabled === false || ui.floatingBall === false || !backdrop.hidden;
+    const themeButton = shadow.querySelector('[data-action="theme"]');
+    themeButton.innerHTML = icon(layout.theme === 'dark' ? 'sun' : 'moon');
+    paintIcons(shadow);
+    positionBall();
+    floatingMenu.update({ characterTheme: theme, theme: layout.theme });
+  }
+
+  function positionBall() {
+    const position = layout.ballPosition;
+    if (!plainObject(position) || !Number.isFinite(position.x) || !Number.isFinite(position.y)) return;
+    const box = ball.getBoundingClientRect();
+    const width = box.width || (window.innerWidth <= 720 ? 64 : 76);
+    const height = box.height || (window.innerWidth <= 720 ? 64 : 76);
+    const x = Math.max(4, Math.min(window.innerWidth - width - 4, position.x));
+    const y = Math.max(4, Math.min(window.innerHeight - height - 4, position.y));
+    ball.style.cssText = `left:${x}px;top:${y}px;right:auto;bottom:auto`;
+  }
+
+  function post(type, value = {}) {
+    frame?.contentWindow?.postMessage({ type, ...value }, location.origin);
+  }
+
+  function ensureFrame() {
+    if (!frameReady) {
+      frameReady = new Promise((resolve, reject) => { resolveFrame = resolve; rejectFrame = reject; });
+      frameReady.catch(() => {});
+      frame = document.createElement('iframe');
+      frame.title = '灵画师控制台';
+      frame.id = 'linghuashi-extension-frame';
+      frame.src = `${baseURL}extension-ui.html?ver=${VERSION}&build=${BUILD}`;
+      frame.setAttribute('allow', 'clipboard-write');
+      dialog.append(frame);
+      sizeTimer = setTimeout(() => {
+        if (!mounted && !destroyed) {
+          status.textContent = '载入超时，请刷新酒馆后重试';
+          rejectFrame(new Error('控制台载入超时'));
+        }
+      }, 20000);
+    }
+    return frameReady;
+  }
+
+  function open(page) {
+    if (destroyed) return;
+    if (['settings', 'generate', 'gallery', 'assistant', 'characters', 'styles', 'connection'].includes(page)) requestedPage = page;
+    floatingMenu.close();
+    previousFocus = shadow.activeElement || document.activeElement;
+    backdrop.hidden = false;
+    activeChat = chatContext();
+    ensureFrame();
+    post('linghuashi:chat', { chat: activeChat });
+    if (mounted && requestedPage) {
+      post('linghuashi:navigate', { page: requestedPage });
+      requestedPage = null;
+    }
+    updateAppearance();
+    shadow.querySelector('[data-action="close"]').focus({ preventScroll: true });
+  }
+
+  function close() {
+    backdrop.hidden = true;
+    updateAppearance();
+    if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+  }
+
+  function onMessage(event) {
+    if (destroyed || event.origin !== location.origin || event.source !== frame?.contentWindow) return;
+    const data = event.data;
+    if (!plainObject(data)) return;
+    if (data.type === 'linghuashi:ready') {
+      activeChat = chatContext();
+      post('linghuashi:init', { account, ui: clone(ui), layout: clone(layout), chat: activeChat, page: requestedPage });
+      requestedPage = null;
+    } else if (data.type === 'linghuashi:mounted') {
+      mounted = true;
+      resolveFrame();
+      clearTimeout(sizeTimer);
+      status.hidden = true;
+      if (requestedPage) {
+        post('linghuashi:navigate', { page: requestedPage });
+        requestedPage = null;
+      }
+      if (pendingFloatingBall !== null) post('linghuashi:floating', { visible: pendingFloatingBall });
+    } else if (data.type === 'linghuashi:state' && plainObject(data.ui)) {
+      const serialized = JSON.stringify(data.ui);
+      if (serialized.length > 2000000) return;
+      ui = JSON.parse(serialized);
+      if (pendingFloatingBall !== null) {
+        const acknowledged = ui.floatingBall === pendingFloatingBall;
+        ui.floatingBall = pendingFloatingBall;
+        if (acknowledged) pendingFloatingBall = null;
+      }
+      persist();
+      updateAppearance();
+      chatLink?.refresh();
+    } else if (data.type === 'linghuashi:restore-layout' && plainObject(data.layout)) {
+      layout = { ...layout, theme: data.layout.theme === 'dark' ? 'dark' : 'light',
+        density: ['compact', 'standard', 'relaxed'].includes(data.layout.density) ? data.layout.density : layout.density };
+      persist(); updateAppearance(); post('linghuashi:layout', { layout: clone(layout) });
+    } else if (data.type === 'linghuashi:close') close();
+    else if (data.type === 'linghuashi:attention') open(data.page || 'generate');
+    else if (data.type === 'linghuashi:images-changed') chatLink?.refresh();
+    else if (['linghuashi:chat-task', 'linghuashi:chat-validate', 'linghuashi:chat-draft', 'linghuashi:chat-draft-submit', 'linghuashi:chat-current-assist'].includes(data.type)) {
+      void chatLink?.receive(data);
+    }
+    else if (data.type === 'linghuashi:assistant-request') void assistantHost.receive(data);
+    else if (data.type === 'linghuashi:secret-request' && typeof data.requestId === 'string' && data.requestId.length <= 64) {
+      void (async () => {
+        try {
+          let value;
+          if (data.action === 'read') value = await credentialVault.read(data.provider, data.ref);
+          else if (data.action === 'write') value = await credentialVault.write(data.provider, data.key, data.ref);
+          else throw new Error('未知秘钥操作');
+          post('linghuashi:secret-result', { requestId: data.requestId, value });
+        } catch {
+          post('linghuashi:secret-result', { requestId: data.requestId, error: '秘钥无法保存或读取，请重新填写后重试' });
+        }
+      })();
+    }
+    else if (data.type === 'linghuashi:storage-request' && typeof data.requestId === 'string'
+      && data.requestId.length <= 64 && STORAGE_ACTIONS.has(data.action)) {
+      void storageRequest(data.action, data.body).then(
+        (value) => post('linghuashi:storage-result', { requestId: data.requestId, value }),
+        (error) => post('linghuashi:storage-result', { requestId: data.requestId, error: error.message }),
+      );
+    }
+    else if (data.type === 'linghuashi:error') {
+      status.textContent = typeof data.message === 'string' ? data.message.slice(0, 200) : '界面无法载入';
+      rejectFrame?.(new Error(status.textContent));
+    }
+  }
+
+  function updateChat() {
+    activeChat = chatContext();
+    post('linghuashi:chat', { chat: activeChat });
+  }
+  function onResize() { positionBall(); floatingMenu.reposition(); }
+  function onPageHide(event) { if (!event.persisted) destroy(); }
+  function destroy() {
+    if (destroyed) return;
+    destroyed = true;
+    clearTimeout(sizeTimer);
+    floatingMenu.destroy();
+    chatLink?.destroy();
+    assistantHost.destroy();
+    window.removeEventListener('message', onMessage);
+    window.removeEventListener('resize', onResize);
+    window.removeEventListener('pagehide', onPageHide);
+    for (const type of events) context.eventSource?.removeListener?.(type, updateChat);
+    for (const [type, handler] of textEvents) context.eventSource?.removeListener?.(type, handler);
+    entry.remove();
+    host.remove();
+    delete window.Linghuashi;
+  }
+
+  ball.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    const rect = ball.getBoundingClientRect();
+    drag = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: rect.x, y: rect.y, moved: false };
+    ball.setPointerCapture(event.pointerId);
+  });
+  ball.addEventListener('pointermove', (event) => {
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    if (Math.hypot(dx, dy) > 5) drag.moved = true;
+    if (!drag.moved) return;
+    floatingMenu.close();
+    layout.ballPosition = { x: drag.x + dx, y: drag.y + dy };
+    positionBall();
+  });
+  function finishDrag(event) {
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (drag.moved) {
+      skipClick = true;
+      persist();
+      setTimeout(() => { skipClick = false; }, 0);
+    }
+    drag = null;
+  }
+  ball.addEventListener('pointerup', finishDrag);
+  ball.addEventListener('pointercancel', finishDrag);
+  ball.addEventListener('click', () => {
+    if (skipClick) { skipClick = false; return; }
+    floatingMenu.toggle();
+  });
+  openButton.addEventListener('click', open);
+  shadow.addEventListener('click', (event) => {
+    const action = event.target.closest('button')?.dataset.action;
+    if (action === 'close' || event.target === backdrop) close();
+    if (action === 'theme') {
+      layout.theme = layout.theme === 'dark' ? 'light' : 'dark';
+      persist();
+      post('linghuashi:layout', { layout });
+      updateAppearance();
+    }
+    if (action === 'fullscreen') {
+      const fullscreen = dialog.classList.toggle('fullscreen');
+      shadow.querySelector('[data-action="fullscreen"]').innerHTML = icon(fullscreen ? 'minimize-2' : 'maximize-2');
+      paintIcons(shadow);
+    }
+  });
+  shadow.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !backdrop.hidden) { event.preventDefault(); close(); }
+    if (event.key === 'Tab' && !backdrop.hidden && event.shiftKey && shadow.activeElement === shadow.querySelector('[data-action="theme"]')) {
+      event.preventDefault();
+      frame?.focus();
+    }
+  });
+  window.addEventListener('message', onMessage);
+  window.addEventListener('resize', onResize);
+  window.addEventListener('pagehide', onPageHide);
+  const events = ['CHAT_CHANGED', 'MESSAGE_SENT', 'MESSAGE_RECEIVED', 'MESSAGE_DELETED']
+    .map((key) => context.eventTypes?.[key]).filter(Boolean);
+  for (const type of events) context.eventSource?.on?.(type, updateChat);
+  chatLink = createChatLink({
+    account, getContext, storageRequest,
+    settings: () => ({ ...SETTINGS_DEFAULTS, ...ui, enabled: ui.enabled !== false, triggerPrefix: ui.triggerPrefix || 'image###', triggerSuffix: ui.triggerSuffix || '###' }),
+    send: async (type, value) => {
+      await ensureFrame();
+      if (!destroyed) post(type, value);
+    },
+    open,
+    notice: (message) => window.toastr?.info(message, '灵画师'),
+  });
+  // The top layer avoids transformed Tavern themes changing fixed positioning.
+  host.showPopover();
+  updateAppearance();
+  window.Linghuashi = Object.freeze({
+    version: VERSION, open, close,
+    capabilities: Object.freeze({ ui: true, generate: true, chatImages: true, serverImages: true, promptAssistant: true, smartIllustration: true, characterProfiles: true, backends: Object.freeze(['novelai', 'comfyui', 'openai']) }),
+  });
+}
+
+$(async () => {
+  try { await start(); }
+  catch (error) {
+    console.error('[灵画师]', error);
+    window.toastr?.error(error.message, '灵画师无法载入');
+  }
+});

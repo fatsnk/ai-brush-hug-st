@@ -1,0 +1,12 @@
+{
+  "display_name": "灵画师",
+  "loading_order": 100,
+  "requires": [],
+  "optional": [],
+  "dependencies": [],
+  "js": "dist/index.js?ver=0.11.0&build=20261014-backup-r1",
+  "author": "灵画师",
+  "version": "0.11.0",
+  "auto_update": false,
+  "minimum_client_version": "1.12.13"
+}
