@@ -4,6 +4,7 @@ import { imageEditDraft, prepareImageEdit, imageEditMessages, applyImageRewrite,
 import { renderImageEditor } from './image-editor.js';
 import { AdvancedPanel } from './advanced.js';
 import { BackupPanel } from './backup.js';
+import { RELEASE } from '../release.js';
 import { ReferenceAssets, normalizeReferenceImage, assetBase64 } from '../reference-assets.js';
 import { advancedOf, validateAdvanced, encodeVibe } from '../advanced-generation.js';
 import { prepareAdvancedPayload, finishAdvancedImages } from '../advanced-payload.js';
@@ -1463,7 +1464,7 @@ function renderConsole() {
   const sessionCount = isInstalled() ? currentChat().count : 12;
   return `<div class="plugin-shell">
     <header class="plugin-header"><div class="plugin-brand"><span class="brand-mark">${pluginIcon(state.characterTheme)}</span><div class="brand-copy"><strong>${esc(config.name)}</strong><span class="brand-subtitle">一款对萌新友好的生图扩展插件，愿世间充满和平友爱~</span></div></div><div class="plugin-header-right"><span class="session-label">${icon('message-square')}${sessionName}</span>${iconButton('more-horizontal', '更多操作', 'more')}</div></header>
-    <div class="plugin-body"><nav class="plugin-nav" aria-label="插件导航"><span class="nav-caption">工作空间</span>${navigation.map((item) => `<button type="button" data-page="${item.id}" class="${state.page === item.id ? 'active' : ''}" aria-current="${state.page === item.id ? 'page' : 'false'}">${icon(item.icon)}<span>${item.title}</span>${item.id === 'gallery' ? `<small>${state.history.length}</small>` : ''}</button>`).join('')}<div class="nav-bottom"><span class="connection-dot"></span><span>生图工坊</span><small>0.10.0</small></div></nav><main class="plugin-content">${renderer()}</main></div>
+    <div class="plugin-body"><nav class="plugin-nav" aria-label="插件导航"><span class="nav-caption">工作空间</span>${navigation.map((item) => `<button type="button" data-page="${item.id}" class="${state.page === item.id ? 'active' : ''}" aria-current="${state.page === item.id ? 'page' : 'false'}">${icon(item.icon)}<span>${item.title}</span>${item.id === 'gallery' ? `<small>${state.history.length}</small>` : ''}</button>`).join('')}<div class="nav-bottom"><span class="connection-dot"></span><span>生图工坊</span><small>${RELEASE.version}</small></div></nav><main class="plugin-content">${renderer()}</main></div>
     <footer class="plugin-bottom"><span>${icon(state.enabled ? 'circle-check' : 'circle')}${!state.enabled ? '插件已关闭' : state.page === 'generate' ? GENERATION_MODES.find((mode) => mode.id === state.provider)?.title || '自定义接口' : '配置已载入'}</span><div class="bottom-actions"><span>当前会话 · ${sessionCount} 条消息</span>${state.page === 'generate' ? button('sparkles', !state.enabled ? '插件已关闭' : busy ? '加入队列' : '生成图像', 'generate', 'primary', !state.enabled ? 'disabled' : '') : ''}</div></footer>
   </div>`;
 }

@@ -4,7 +4,7 @@ globalThis.window ||= { addEventListener() {} };
 const { normalizeBackupConfig, mergeBackupConfig, portableCredentials, restoreBackupCredentials,
   scrubBackup, referencedAssets, rewriteBackupAssets } = await import('./backup-config.js');
 const { createBackup, inspectBackup, encryptBackup, decryptBackup, backupHash, archiveTasks } = await import('./backup.js');
-const { compareVersions } = await import('./release.js');
+const { compareVersions, RELEASE } = await import('./release.js');
 const { default: JSZip } = await import('jszip');
 const fixture = () => normalizeBackupConfig({
   novelai: { positive: 'a blue butterfly' },
@@ -45,7 +45,7 @@ test('duplicate and over-limit libraries fail instead of being silently truncate
 });
 test('configuration backup round trip contains checksummed references and portable credential slots', async () => {
   const pack = await inspectBackup(file(await exportFixture()));
-  assert.equal(pack.manifest.pluginVersion, '0.11.0');
+  assert.equal(pack.manifest.pluginVersion, RELEASE.version);
   assert.equal(pack.secrets.length, 0);
   assert.notEqual(pack.manifest.config.connections.novelai.keyRef, fixture().connections.novelai.keyRef);
   assert.equal(pack.manifest.images.length, 0);
