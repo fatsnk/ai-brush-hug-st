@@ -1,0 +1,63 @@
+name: Build release
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Import initial audited source package
+        run: |
+          if [ -f release-import.zip ]; then
+            python3 - <<'PY'
+          import pathlib, zipfile
+          root = pathlib.Path.cwd()
+          with zipfile.ZipFile("release-import.zip") as archive:
+              for entry in archive.infolist():
+                  name = pathlib.PurePosixPath(entry.filename)
+                  if name.is_absolute() or ".." in name.parts or "\\" in entry.filename or entry.is_dir():
+                      raise RuntimeError("Invalid package entry")
+                  if name.parts[0] == ".github":
+                      continue
+                  allowed = {"src", "server", "scripts", "docs", "dist", ".release-artifacts",
+                      "manifest.json", "extension.manifest.json", "package.json", "package-lock.json",
+                      "vite.config.js", "vite.extension.config.js", "index.html", "preview.html",
+                      "extension-ui.html", "README.md", "CHANGELOG.md", ".gitignore"}
+                  if name.parts[0] not in allowed:
+                      raise RuntimeError("Unexpected package path")
+                  target = root.joinpath(*name.parts)
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  target.write_bytes(archive.read(entry))
+          PY
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build:extension
+      - run: npm run package:release
+      - name: Publish installable files and release packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp extension.manifest.json manifest.json
+          mkdir -p dist
+          cp -R extension-dist/. dist/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src server scripts docs manifest.json extension.manifest.json dist package.json package-lock.json \
+            vite.config.js vite.extension.config.js index.html preview.html extension-ui.html README.md CHANGELOG.md .gitignore
+          if [ -f release-import.zip ]; then
+            git rm release-import.zip
+          fi
+          if ! git diff --cached --quiet; then
+            git commit -m "Build installable extension"
+            git push
+          fi
+          VERSION=$(node --input-type=module -e "import { RELEASE } from './src/release.js'; console.log(RELEASE.version)")
+          gh release create "v${VERSION}" .release-artifacts/*-v*.zip .release-artifacts/SHA256SUMS.txt \
+            --title "灵画师 ${VERSION}" --notes-file CHANGELOG.md --target "$(git rev-parse HEAD)"
