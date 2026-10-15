@@ -1,6 +1,6 @@
 import { bindImageSlots, bindSmartSlot, bindingIsCurrent, chatIdentity, CHAT_PENDING } from './chat.js';
 import { normalizeAssistant } from './prompt-assistant.js';
-import { openChatStore } from './chat-storage.js';
+import { createChatSync, openChatStore } from './chat-storage.js';
 import { getCharacterTheme } from './ui/appearance.js';
 import { icon, paintIcons } from './icons.js';
 import { locatePromptRanges, replacePromptRange, restorePromptRange } from './chat-render.js';
@@ -40,6 +40,7 @@ export function createChatLink({ account, getContext, settings, send, open, noti
   }).then((value) => { store = value; return value; }).catch(() => {
     notice('聊天任务存储不可用，请检查浏览器存储权限');
   });
+  const syncRecords = createChatSync((chatKey) => store.sync(chatKey));
 
   const isCurrent = (entry) => bindingIsCurrent(entry, getContext(), settings());
   const scheduledRender = () => {
@@ -70,8 +71,10 @@ export function createChatLink({ account, getContext, settings, send, open, noti
     if (destroyed || !store) return;
     const context = getContext();
     const options = settings();
-    try { await store.sync(chatIdentity(context)); }
-    catch { notice('酒馆服务器配图记录无法读取，请刷新后重试'); return; }
+    const chatKey = chatIdentity(context);
+    if (options.enabled && chatKey && !await syncRecords(chatKey,
+      ['server', 'local'].includes(options.cacheLocation) ? 'server' : 'browser')) return;
+    if (turn !== revision || destroyed) return;
     const assistant = normalizeAssistant(options.assistant);
     if (!options.auto && !assistant.autoPrompt) pendingReplies.clear();
     const visible = new Map();

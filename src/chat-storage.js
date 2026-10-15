@@ -6,6 +6,34 @@ const requestResult = (request) => new Promise((resolve, reject) => {
   request.onerror = () => reject(request.error);
 });
 
+export function createChatSync(sync, now = Date.now) {
+  let active;
+  let state;
+  return async (chatKey, location) => {
+    const key = JSON.stringify([chatKey, location]);
+    while (active) {
+      const pending = active;
+      const result = await pending.promise;
+      if (pending.key === key) return result;
+    }
+    if (state?.key !== key) state = { key, failures: 0, retryAt: 0 };
+    if (now() < state.retryAt) return false;
+    const attempt = { key };
+    active = attempt;
+    attempt.promise = Promise.resolve().then(() => sync(chatKey)).then(() => {
+      state.failures = 0;
+      state.retryAt = 0;
+      return true;
+    }, () => {
+      state.failures++;
+      state.retryAt = now() + Math.min(60000, 15000 * 2 ** Math.min(state.failures - 1, 2));
+      return false;
+    });
+    try { return await attempt.promise; }
+    finally { if (active === attempt) active = null; }
+  };
+}
+
 export async function openChatStore(account, { mode = () => 'browser', request: serverRequest, ownsRequest = () => false } = {}) {
   const request = indexedDB.open(`linghuashi-drawings-v1:st:${encodeURIComponent(account)}`, 1);
   request.onupgradeneeded = () => {
