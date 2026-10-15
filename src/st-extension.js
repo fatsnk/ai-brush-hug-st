@@ -10,6 +10,7 @@ import { createStorageRequest, STORAGE_ACTIONS } from './server-storage.js';
 import { createAssistantHost } from './assistant-host.js';
 import { chatIdentity } from './chat.js';
 import { RELEASE } from './release.js';
+import { createExtensionAPI, apiError } from './extension-api.js';
 
 const VERSION = RELEASE.version;
 const BUILD = RELEASE.build;
@@ -59,6 +60,7 @@ async function start() {
   let pendingFloatingBall = null;
   let activeChat = chatContext();
   let chatLink;
+  const extensionAPI = createExtensionAPI({ version: VERSION, ensureReady: () => ensureFrame(), send: post });
   let frameReady;
   let resolveFrame;
   let rejectFrame;
@@ -220,7 +222,7 @@ async function start() {
 
   function open(page) {
     if (destroyed) return;
-    if (['settings', 'generate', 'gallery', 'assistant', 'characters', 'styles', 'connection'].includes(page)) requestedPage = page;
+    if (['settings', 'generate', 'batch', 'gallery', 'assistant', 'characters', 'styles', 'tags', 'connection', 'changelog'].includes(page)) requestedPage = page;
     floatingMenu.close();
     previousFocus = shadow.activeElement || document.activeElement;
     backdrop.hidden = false;
@@ -245,6 +247,17 @@ async function start() {
     if (destroyed || event.origin !== location.origin || event.source !== frame?.contentWindow) return;
     const data = event.data;
     if (!plainObject(data)) return;
+    if (data.type === 'linghuashi:extension-response' || data.type === 'linghuashi:extension-task') {
+      extensionAPI.receive(data); return;
+    }
+    if (data.type === 'linghuashi:extension-chat-request' && typeof data.requestId === 'string' && data.requestId.length <= 64) {
+      void chatLink.prepareExternal(data).then(
+        (value) => post('linghuashi:extension-chat-result', { requestId: data.requestId, value }),
+        (error) => post('linghuashi:extension-chat-result', { requestId: data.requestId,
+          error: { code: error.code || 'CHAT_TARGET_INVALID', message: error.message } }),
+      );
+      return;
+    }
     if (data.type === 'linghuashi:ready') {
       activeChat = chatContext();
       post('linghuashi:init', { account, ui: clone(ui), layout: clone(layout), chat: activeChat, page: requestedPage });
@@ -275,6 +288,7 @@ async function start() {
       layout = { ...layout, theme: data.layout.theme === 'dark' ? 'dark' : 'light',
         density: ['compact', 'standard', 'relaxed'].includes(data.layout.density) ? data.layout.density : layout.density };
       persist(); updateAppearance(); post('linghuashi:layout', { layout: clone(layout) });
+      chatLink?.refresh();
     } else if (data.type === 'linghuashi:close') close();
     else if (data.type === 'linghuashi:attention') open(data.page || 'generate');
     else if (data.type === 'linghuashi:images-changed') chatLink?.refresh();
@@ -321,6 +335,7 @@ async function start() {
     floatingMenu.destroy();
     chatLink?.destroy();
     assistantHost.destroy();
+    extensionAPI.destroy();
     window.removeEventListener('message', onMessage);
     window.removeEventListener('resize', onResize);
     window.removeEventListener('pagehide', onPageHide);
@@ -371,6 +386,7 @@ async function start() {
       persist();
       post('linghuashi:layout', { layout });
       updateAppearance();
+      chatLink?.refresh();
     }
     if (action === 'fullscreen') {
       const fullscreen = dialog.classList.toggle('fullscreen');
@@ -405,9 +421,16 @@ async function start() {
   host.showPopover();
   updateAppearance();
   window.Linghuashi = Object.freeze({
-    version: VERSION, open, close,
-    capabilities: Object.freeze({ ui: true, generate: true, chatImages: true, serverImages: true, promptAssistant: true, smartIllustration: true, characterProfiles: true, backends: Object.freeze(['novelai', 'comfyui', 'openai']) }),
+    ...extensionAPI.api, open, close,
+    getChatTarget: (messageId, slot = 0) => {
+      if (!Number.isSafeInteger(messageId) || messageId < 0 || !Number.isSafeInteger(slot) || slot < 0 || slot > 15) {
+        throw apiError('INVALID_OPTIONS', '消息编号或配图位置无效');
+      }
+      return { chatKey: chatIdentity(getContext()), messageId, slot };
+    },
+    capabilities: Object.freeze({ ui: true, generate: true, extensionAPI: 1, chatImages: true, serverImages: true, promptAssistant: true, smartIllustration: true, characterProfiles: true, backends: Object.freeze(['novelai', 'comfyui', 'openai', 'sdwebui']) }),
   });
+  window.dispatchEvent(new CustomEvent('linghuashi:api-ready', { detail: { version: VERSION, apiVersion: 1 } }));
 }
 
 $(async () => {

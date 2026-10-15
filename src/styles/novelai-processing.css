@@ -1,0 +1,42 @@
+.novelai-processing-dialog { width: min(960px, calc(100vw - 28px)); max-width: none; max-height: calc(100dvh - 28px); margin: auto; padding: 0; border: 1px solid var(--border); border-radius: 8px; color: var(--text); background: var(--bg); font: inherit; overflow: hidden; box-shadow: 0 18px 70px #0003; }
+.novelai-processing-dialog[open] { display: flex; flex-direction: column; }
+.novelai-processing-dialog::backdrop { background: #18232166; }
+.novelai-processing-dialog header, .novelai-processing-dialog footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 14px 18px; flex: none; }
+.novelai-processing-dialog header { border-bottom: 1px solid var(--border); }
+.novelai-processing-dialog footer { border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+.novelai-processing-dialog h2 { display: flex; gap: 8px; align-items: center; margin: 0; font-size: 16px; }
+.novelai-processing-dialog svg { width: 18px; height: 18px; flex: none; }
+.processing-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 0 18px; border-bottom: 1px solid var(--border); flex: none; }
+.processing-tabs button { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); padding: 13px 6px; font: inherit; font-size: 13px; cursor: pointer; }
+.processing-tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+.processing-body { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 24px; min-height: 0; overflow: auto; padding: 18px; overscroll-behavior: contain; }
+.processing-body aside { min-width: 0; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.processing-body aside img { width: 100%; height: 220px; object-fit: contain; background: var(--soft); border-radius: 4px; }
+.processing-body aside strong { display: block; color: var(--text); }
+.processing-body fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.processing-fields .ui-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; min-width: 0; font-size: 12px; }
+.processing-fields input:not([type="checkbox"], [type="range"]), .processing-fields select, .processing-fields textarea { width: 100%; box-sizing: border-box; min-width: 0; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); color: var(--text); padding: 9px; font: inherit; font-size: 13px; }
+.processing-fields textarea { resize: vertical; }
+.processing-fields input[type="range"] { width: 100%; accent-color: var(--accent); margin: 6px 0; }
+.processing-fields output { float: right; color: var(--accent); }
+.processing-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; }
+.processing-presets { display: flex; gap: 8px; margin-bottom: 16px; }
+.processing-presets [aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--soft); }
+.processing-note { font-size: 13px; line-height: 1.6; color: var(--muted); margin: 0 0 16px; }
+.processing-check { display: flex; gap: 8px; align-items: center; font-size: 13px; margin: 12px 0; }
+.processing-check input { width: 16px; height: 16px; flex: none; accent-color: var(--accent); }
+.processing-advanced { border-top: 1px solid var(--border); padding-top: 12px; margin-bottom: 16px; }
+.processing-advanced summary { font-size: 13px; cursor: pointer; margin-bottom: 12px; }
+.processing-error { margin: 0; padding: 0 18px 12px; color: var(--danger); font-size: 13px; overflow-wrap: anywhere; }
+.processing-error:empty { display: none; }
+@media (max-width: 620px) {
+  .novelai-processing-dialog { width: calc(100vw - 12px); max-height: calc(100dvh - 12px); }
+  .novelai-processing-dialog header, .novelai-processing-dialog footer, .processing-body { padding: 12px; }
+  .processing-body { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .processing-body aside { display: grid; grid-template-columns: 88px minmax(0, 1fr); column-gap: 12px; align-content: start; }
+  .processing-body aside img { grid-row: span 5; height: 104px; }
+  .processing-body aside p { margin: 0 0 6px; }
+  .processing-tabs { padding: 0 12px; }
+  .processing-error { padding-inline: 12px; }
+  .novelai-processing-dialog footer .ui-button { padding: 9px; }
+}

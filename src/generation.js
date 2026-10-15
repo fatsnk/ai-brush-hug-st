@@ -1,4 +1,5 @@
 import JSZip from 'jszip';
+import { sdwebuiImages, watchSDWebUIProgress } from './sdwebui.js';
 
 const MAX_IMAGE = 20 * 1024 * 1024;
 const MAX_RESPONSE = 200 * 1024 * 1024;
@@ -59,15 +60,22 @@ export function wait(ms, signal) {
   });
 }
 
-function statusError(response) {
+function statusError(response, processing = false) {
   const messages = {
     400: '生图参数被服务拒绝，请检查模型、尺寸和工作流',
     401: '秘钥未通过鉴权，请重新填写',
+    402: '接口余额或 Anlas 不足，请检查账户额度',
     403: '当前秘钥没有生图权限',
     404: '生图接口或模型不存在，请检查接口路径',
     413: '请求过大，请减少工作流或提示词长度',
+    422: '生图参数格式不被服务支持，请检查模型、采样器和其他参数',
     429: '请求频率或额度受限，请等待后重试',
   };
+  if (processing) Object.assign(messages, {
+    400: '图片处理参数被接口拒绝，请检查处理尺寸、模型和接口支持范围',
+    403: '当前秘钥没有此图片处理权限',
+    404: '此接口未提供对应图片处理功能，请改用支持此能力的 NovelAI 接口',
+  });
   const retry = response.headers.get('retry-after');
   const seconds = retry && /^\d+$/.test(retry) ? Number(retry) : retry ? (Date.parse(retry) - Date.now()) / 1000 : 30;
   return new GenerationError(messages[response.status] || `生图服务返回 HTTP ${response.status}`, {
@@ -83,7 +91,7 @@ async function request(job, url, options, fetcher) {
   });
   if (!response.ok) {
     await response.body?.cancel().catch(() => {});
-    throw statusError(response);
+    throw statusError(response, Boolean(job.plan.snapshot?.novelaiProcessing));
   }
   return response;
 }
@@ -148,15 +156,20 @@ export function buildNovelAIRequest(params, characterPrompts = []) {
 export async function submitGeneration(job, fetcher = fetch) {
   if (job.execution) return;
   const plan = job.plan;
-  const payload = job.preparePayload ? await job.preparePayload() : plan.body;
+  let payload = job.preparePayload ? await job.preparePayload() : plan.body;
+  if (plan.provider === 'sdwebui' && plan.sdTaskIdSupported) payload = { ...payload, force_task_id: `task(linghuashi-${job.id})` };
   job.controller.signal.throwIfAborted();
   await job.checkpoint?.({ stage: 'submitting' });
   job.controller.signal.throwIfAborted();
   const multipart = typeof FormData !== 'undefined' && payload instanceof FormData;
-  const response = await request(job, plan.url, {
-    method: 'POST', headers: { ...(!multipart ? { 'Content-Type': 'application/json' } : {}), ...plan.headers },
-    body: multipart ? payload : JSON.stringify(payload),
-  }, fetcher);
+  const stopProgress = watchSDWebUIProgress(job, fetcher);
+  let response;
+  try {
+    response = await request(job, plan.url, {
+      method: 'POST', headers: { ...(!multipart ? { 'Content-Type': 'application/json' } : {}), ...plan.headers },
+      body: multipart ? payload : JSON.stringify(payload),
+    }, fetcher);
+  } finally { stopProgress(); }
   if (plan.provider === 'comfyui') {
     const body = await jsonResponse(response);
     if (typeof body.prompt_id !== 'string' || !body.prompt_id
@@ -206,6 +219,12 @@ async function comfyResults(job, fetcher) {
 }
 
 function jsonImages(body) {
+  if (Array.isArray(body?.images) && body.images.length && body.images.length <= 32) {
+    return body.images.map((item) => {
+      if (typeof item?.image !== 'string' || !item.image) throw new GenerationError('NovelAI 图片响应缺少 image');
+      return { base64: item.image, seed: item.seed };
+    });
+  }
   if (!Array.isArray(body?.data) || !body.data.length || body.data.length > 32) {
     throw new GenerationError('接口没有返回可用图片；不支持异步任务式图片响应');
   }
@@ -231,7 +250,7 @@ export async function imageDescriptors(bytes) {
       }
       const data = await file.async('uint8array');
       imageType(data);
-      descriptors.push({ bytes: data });
+      descriptors.push({ bytes: data, filename: file.name.split('/').at(-1).slice(0, 160) });
     }
     return descriptors;
   }
@@ -245,7 +264,7 @@ export async function imageDescriptors(bytes) {
 export async function downloadResults(job, fetcher = fetch) {
   if (job.images) return job.images;
   const descriptors = job.plan.provider === 'comfyui' ? await comfyResults(job, fetcher)
-    : await imageDescriptors(job.execution.bytes);
+    : job.plan.provider === 'sdwebui' ? sdwebuiImages(job.execution.bytes) : await imageDescriptors(job.execution.bytes);
   job.phase = 'downloading';
   job.notify?.();
   const images = [];
@@ -254,6 +273,7 @@ export async function downloadResults(job, fetcher = fetch) {
     job.controller.signal.throwIfAborted();
     let bytes = descriptor.bytes;
     if (descriptor.base64) {
+      descriptor.base64 = descriptor.base64.replace(/^data:image\/(?:png|jpeg|webp);base64,/, '');
       if (descriptor.base64.length > MAX_IMAGE * 1.4) throw new GenerationError('单张图片超过 20 MB');
       try { bytes = Uint8Array.from(atob(descriptor.base64), (char) => char.charCodeAt(0)); }
       catch { throw new GenerationError('图片 Base64 内容无效'); }
@@ -272,7 +292,8 @@ export async function downloadResults(job, fetcher = fetch) {
     if (!bytes?.length || bytes.length > MAX_IMAGE || (total += bytes.length) > MAX_RESPONSE) {
       throw new GenerationError('生成图片为空或超过存储大小限制');
     }
-    images.push({ blob: new Blob([bytes], { type: imageType(bytes) }), seed: descriptor.seed });
+    images.push({ blob: new Blob([bytes], { type: imageType(bytes) }), seed: descriptor.seed, model: descriptor.model,
+      ...(descriptor.filename ? { filename: descriptor.filename } : {}) });
   }
   job.images = images;
   return images;
@@ -300,6 +321,7 @@ export class GenerationQueue {
     this.running = 0;
     this.nextStart = 0;
     this.timer = null;
+    this.pausedBatches = new Set();
   }
 
   add(plan, options = {}) {
@@ -314,14 +336,14 @@ export class GenerationQueue {
     job.notify = () => this.changed();
     this.jobs.push(job);
     this.changed();
-    this.pump();
+    if (!options.defer) this.pump();
     return job;
   }
 
   restore(rows) {
     for (const row of rows) {
       const existing = this.jobs.find((job) => job.id === row.id);
-      if (existing && ['queued', 'running'].includes(existing.status) && !existing.remote) continue;
+      if (existing && !existing.remote && (existing.executing || ['queued', 'running'].includes(existing.status))) continue;
       const value = { ...row, plan: structuredClone(row.plan), execution: row.execution || (existing?.execution?.bytes ? existing.execution : undefined),
         remote: row.status === 'running', controller: new AbortController() };
       value.notify = () => this.changed();
@@ -364,6 +386,22 @@ export class GenerationQueue {
     this.changed(); this.pump();
   }
 
+  pauseBatch(id) {
+    this.pausedBatches.add(id);
+    for (const job of this.jobs) if (job.plan.snapshot?.experiment?.id === id && job.status === 'queued') {
+      job.status = 'paused'; job.phase = 'waiting'; job.error = '';
+    }
+    this.changed();
+  }
+
+  resumeBatch(id) {
+    const paused = this.jobs.filter((job) => job.plan.snapshot?.experiment?.id === id && job.status === 'paused' && job.stage === 'waiting' && !job.execution);
+    if (paused.length + this.jobs.filter((job) => ACTIVE.has(job.status)).length > 32) throw new GenerationError('继续后超过 32 个等待或运行任务');
+    this.pausedBatches.delete(id);
+    for (const job of paused) { job.status = 'queued'; job.controller = new AbortController(); job.error = ''; }
+    this.changed(); this.pump();
+  }
+
   pump() {
     clearTimeout(this.timer);
     const settings = this.settings();
@@ -380,6 +418,7 @@ export class GenerationQueue {
   }
 
   async execute(job) {
+    job.executing = true;
     this.running++;
     job.status = 'running'; job.phase = job.execution ? 'retrieving' : 'submitting';
     job.startedAt = Date.now(); job.attempts++;
@@ -393,7 +432,10 @@ export class GenerationQueue {
     try {
       if (this.persistence) {
         const claim = await this.persistence.claim(job);
-        if (claim.busy) { busy = true; job.status = 'queued'; job.phase = 'waiting'; return; }
+        if (claim.busy) {
+          busy = true; job.status = this.pausedBatches.has(job.plan.snapshot?.experiment?.id) ? 'paused' : 'queued';
+          job.phase = 'waiting'; return;
+        }
         timeout = startTimeout();
         await this.persistence.hydrate(job);
       } else timeout = startTimeout();
@@ -424,6 +466,7 @@ export class GenerationQueue {
         }
       }
       this.running--;
+      job.executing = false;
       job.finishedAt = Date.now();
       if (job.status === 'completed' || job.status === 'cancelled') {
         delete job.images; delete job.execution; delete job.rows;

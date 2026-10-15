@@ -37,9 +37,11 @@ async function boot() {
     if (event.data?.type === 'linghuashi:navigate') plugin.showPage(event.data.page);
     if (event.data?.type === 'linghuashi:floating' && typeof event.data.visible === 'boolean') plugin.setFloatingBall(event.data.visible);
     if (event.data?.type?.startsWith('linghuashi:chat-')) plugin.receiveChatCommand(event.data);
+    if (['linghuashi:extension-request', 'linghuashi:extension-abort'].includes(event.data?.type)) plugin.receiveExtensionCommand(event.data);
   });
   document.addEventListener('keydown', (event) => {
-    if (event.key !== 'Escape' || document.getElementById('overlay-root').childElementCount) return;
+    if (event.key !== 'Escape' || document.getElementById('overlay-root').childElementCount
+      || document.querySelector('.tag-picker[open], .profile-ai-dialog[open], .novelai-processing-dialog[open]')) return;
     event.preventDefault();
     window.parent.postMessage({ type: 'linghuashi:close' }, location.origin);
   }, true);

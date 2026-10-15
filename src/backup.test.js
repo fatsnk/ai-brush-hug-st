@@ -26,6 +26,36 @@ test('configuration export excludes transient UI, raw keys, drafts and unknown f
   const config = normalizeBackupConfig(source);
   for (const key of ['key', 'assistantInput', 'assistantDraft', 'history', 'unknown', 'api_key']) assert.ok(!Object.hasOwn(config, key));
 });
+test('workbench, scoped reviews and reusable Vibe assets round trip through backup; share excludes reviews', () => {
+  const asset = { id: 'a'.repeat(64), location: 'server', mime: 'image/png', width: 64, height: 64 };
+  const source = { ...fixture(), workbench: { characters: 'red hair\nblue hair', seed: 42 },
+    drawingReviews: { 'server:image-a': 'best' },
+    vibeLibrary: [{ id: crypto.randomUUID(), name: 'Watercolor', category: 'Style', favorite: true, strength: .4, image: asset }] };
+  const config = normalizeBackupConfig(source);
+  assert.equal(config.workbench.characters, source.workbench.characters);
+  assert.equal(config.drawingReviews['server:image-a'], 'best');
+  assert.equal(config.vibeLibrary[0].strength, .4);
+  assert.equal(referencedAssets(config).length, 1);
+  assert.equal(Object.hasOwn(scrubBackup(config, { sharing: true }), 'drawingReviews'), false);
+  const merged = mergeBackupConfig(fixture(), config, ['general', 'parameters']);
+  assert.equal(merged.vibeLibrary.length, 1);
+  assert.equal(merged.drawingReviews['server:image-a'], 'best');
+});
+test('tag libraries round trip through configuration and sharing and merge without duplicates', async () => {
+  const state = fixture();
+  state.tagLibrary = { version: 2, custom: [{ id: 'custom-fixture', name: '本地画风', en: 'fixture watercolor', category: '测试', aliases: ['水粉'],
+    description: '用户记录的水彩经验', source: 'https://example.test/wiki', preview: 'data:image/webp;base64,UklGRg==' }],
+    favorites: ['custom-fixture', 'builtin-smile'], recent: ['custom-fixture'],
+    templates: [{ id: 'template-fixture', name: '我的雨夜', category: '场景', positive: 'night, rain', negative: 'blurry', artist: 'watercolor' }] };
+  const pack = await inspectBackup(file(await exportFixture({ state, sections: ['tags'], kind: 'share' })));
+  assert.deepEqual(pack.manifest.config.tagLibrary, state.tagLibrary);
+  const current = normalizeBackupConfig(state);
+  assert.deepEqual(mergeBackupConfig(current, pack.manifest.config, ['tags']).tagLibrary, state.tagLibrary);
+  const changed = normalizeBackupConfig({ ...state, tagLibrary: {} });
+  assert.deepEqual(mergeBackupConfig(changed, pack.manifest.config, ['tags'], 'replace').tagLibrary, state.tagLibrary);
+  assert.throws(() => normalizeBackupConfig({ tagLibrary: { custom: [state.tagLibrary.custom[0], state.tagLibrary.custom[0]] } }));
+  assert.throws(() => normalizeBackupConfig({ tagLibrary: { custom: [{ ...state.tagLibrary.custom[0], preview: 'https://example.test/remote.png' }] } }));
+});
 test('recursive scrubbing removes keys, credential headers and endpoint query tokens', () => {
   const clean = scrubBackup({ url: 'https://user:pass@example.test/v1?api_key=hidden&foo=yes',
     headers: { Authorization: 'hidden' }, nested: { password: 'hidden', prompt: `token ${'sk-'}${'1234567890'.repeat(3)}` } });

@@ -1,6 +1,6 @@
 {
   "name": "ai-brush-hug-st",
-  "version": "0.11.1",
+  "version": "0.21.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -13,11 +13,15 @@
     "package:release": "node scripts/package-release.mjs",
     "test:generation": "node --test src/generation.test.js src/retention.test.js",
     "test:advanced": "node --test src/advanced-generation.test.js server/linghuashi-storage/reference-assets.test.mjs",
+    "test:sdwebui": "node --test src/sdwebui.test.js",
     "test:chat": "node --test src/chat.test.js",
     "test:assistant": "node --test src/prompt-assistant.test.js",
     "test:characters": "node --test src/character-profiles.test.js",
+    "test:profile-ai": "node --test src/profile-ai.test.js",
+    "test:processing": "node --test src/novelai-processing.test.js",
     "test:versions": "node --test server/linghuashi-storage/versions.test.mjs",
     "test:presets": "node --test src/credentials.test.js src/artist-library.test.js",
+    "test:tags": "node --test src/tag-library.test.js src/prompt-composer.test.js",
     "test:storage": "node --test server/linghuashi-storage/storage.test.mjs server/linghuashi-storage/tasks.test.mjs",
     "test:tasks": "node --test src/task-persistence.test.js server/linghuashi-storage/tasks.test.mjs"
   },

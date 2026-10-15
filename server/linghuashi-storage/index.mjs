@@ -30,7 +30,7 @@ function binding(value) {
 
 function safeSnapshot(value) {
   if (value === null || value === undefined) return null;
-  if (!object(value) || !['novelai', 'openai', 'comfyui'].includes(value.provider)) throw fail('图片参数格式无效');
+  if (!object(value) || !['novelai', 'openai', 'comfyui', 'sdwebui'].includes(value.provider)) throw fail('图片参数格式无效');
   if (JSON.stringify(value).length > 2000000) throw fail('图片参数过大');
   const clean = (item, depth = 0) => {
     if (depth > 40) throw fail('图片参数层级过深');

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { normalizeBackupChats, STORAGE_PROTOCOL } from './backup-records.mjs';
+import { normalizeBackupChats, STORAGE_PROTOCOL, STORAGE_VERSION } from './backup-records.mjs';
 import { createStorageService } from './index.mjs';
 import { RELEASE } from '../../src/release.js';
 const binding = { id: 'a'.repeat(64), branch: 'b'.repeat(64), chatKey: 'fixture-chat', swipe: 0, slot: 0 };
@@ -28,7 +28,8 @@ test('backup service is account isolated and reports protocol without exposing s
   const user = { profile: { handle: 'fixture' }, directories: { root, userImages: path.join(root, 'user/images') } };
   try {
     const status = await service.dispatch(user, 'backup/status');
-    assert.equal(status.protocol, STORAGE_PROTOCOL); assert.equal(status.version, RELEASE.version);
+    assert.equal(status.protocol, STORAGE_PROTOCOL); assert.equal(status.protocol, RELEASE.storageProtocol);
+    assert.equal(status.version, STORAGE_VERSION);
     assert.deepEqual((await service.dispatch(user, 'backup/chats')).rows, []);
     await service.dispatch(user, 'backup/chats-merge', { rows: [{ binding, savedIds: [] }] });
     const first = await service.dispatch(user, 'backup/chats');

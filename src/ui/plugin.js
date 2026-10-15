@@ -1,16 +1,25 @@
 import { escapeHtml, downloadJson } from '../config.js';
-import { assistantHostRequest, credentialRequest, currentAccount, currentChat, isInstalled, notifyUIState, readUIState, storageKey, storageRequest } from '../runtime.js';
+import { assistantHostRequest, credentialRequest, currentAccount, currentChat, extensionChatRequest, isInstalled, notifyUIState, readUIState, storageKey, storageRequest } from '../runtime.js';
+import { apiError, publicExtensionTask } from '../extension-api.js';
+import { createExtensionTaskService } from '../extension-tasks.js';
+import { extensionCapabilities, extensionPresets, prepareExtensionSnapshot, publicImageParameters } from './extension-generation.js';
 import { imageEditDraft, prepareImageEdit, imageEditMessages, applyImageRewrite, drawingSeed } from '../image-edit.js';
+import { applyChatImageEdit, chatImageBelongsTo } from '../chat-image-actions.js';
 import { renderImageEditor } from './image-editor.js';
+import { NovelAIProcessingPanel } from './novelai-processing.js';
+import { processingSnapshot, prepareProcessingSource, validateProcessingDraft, buildProcessingRequest,
+  processingEndpoint, processingTitle, processingVariant } from '../novelai-processing.js';
+import '../styles/novelai-processing.css';
 import { AdvancedPanel } from './advanced.js';
 import { BackupPanel } from './backup.js';
 import { RELEASE } from '../release.js';
+import { ChangelogPanel } from './changelog.js';
 import { ReferenceAssets, normalizeReferenceImage, assetBase64 } from '../reference-assets.js';
 import { advancedOf, validateAdvanced, encodeVibe } from '../advanced-generation.js';
 import { prepareAdvancedPayload, finishAdvancedImages } from '../advanced-payload.js';
 import { watchComfyProgress } from '../comfy-advanced.js';
 import '../styles/advanced.css';
-import { groupVersions, currentDrawing, versionGroupId, editRelation, drawingGroups } from '../../server/linghuashi-storage/image-versions.mjs';
+import { groupVersions, currentDrawing, versionGroupId, editRelation, drawingGroups, validImageId } from '../../server/linghuashi-storage/image-versions.mjs';
 import '../styles/image-editor.css';
 import { normalizeAssistant, assistantURLs, assistantConnectionSync, assistantModelNames, buildAssistantMessages, parseAssistantResult, requestAssistantAPI, applyAssistantPlan } from '../prompt-assistant.js';
 import { renderAssistant } from './assistant.js';
@@ -18,17 +27,31 @@ import '../styles/assistant.css';
 import { migrateProfileLibrary, normalizeProfileLibrary, normalizeProfile, effectiveProfiles, saveProfile, deleteProfile,
   updateProfileChat, resolveCharacterScene, applyCharacterScene, normalizeCharacterScene, restoreSceneProfiles } from '../character-profiles.js';
 import { renderCharacters as renderCharacterPage, renderCharacterSelection } from './characters.js';
+import { ProfileAIPanel } from './profile-ai.js';
+import { requestAssistantText } from '../prompt-assistant.js';
 import '../styles/characters.css';
+import '../styles/profile-ai.css';
 import { CONNECTION_PROVIDERS, normalizeConnection, normalizeConnections, resolvePresetConnection,
   saveConnectionProfile, deleteConnectionProfile, setCurrentConnection } from '../connections.js';
 import { emptyArtist, normalizeArtistLibrary, saveArtist, importArtistLibrary, applyArtist } from '../artist-library.js';
 import { renderArtists, renderArtistQuickPick } from './artists.js';
 import { renderNamedConnections, renderPresetBinding } from './named-connections.js';
 import '../styles/artists.css';
+import { normalizeTagLibrary, allTagTemplates } from '../tag-library.js';
+import { TagLibraryPanel, attachPromptTagButtons } from './tags.js';
+import { visualPromptPreview } from '../visual-prompt.js';
+import { WorkbenchPanel } from './workbench.js';
+import { normalizeWorkbench, normalizeReviews, reviewValue, setReview, BATCH_LIMIT } from '../prompt-workbench.js';
+import { normalizeVibeLibrary } from '../vibe-library.js';
+import '../styles/workbench.css';
+import '../styles/tags.css';
+import '../styles/prompt-editor.css';
 import { icon, paintIcons } from '../icons.js';
 import { navigation, samples, styles } from './sample-data.js';
 import { pluginIcon } from './branding.js';
 import { characterThemeAccent, getCharacterTheme } from './appearance.js';
+import { renderGenerationTransition } from './generation-transition.js';
+import '../styles/generation-transition.css';
 import { createFloatingMenu } from './floating-menu.js';
 import { GenerationQueue, GenerationError, buildNovelAIRequest, submitGeneration, downloadResults, cancelComfyPending } from '../generation.js';
 import { TaskPersistence, createBrowserTaskRequest } from '../task-persistence.js';
@@ -84,6 +107,9 @@ import { identifySkService, probeService, resolveNovelAIService } from './connec
 import { NOVELAI_DEFAULTS, NOVELAI_MODELS, NOVELAI_SIZES, isNAI3, supportsVariety, normalizeNovelAI, normalizeNovelAIState, selectedNovelAIPreset, novelAIPresetDirty, loadNovelAIPreset, saveNovelAIPreset, renderNovelAIParameters, renderNovelAIPresets } from './novelai.js';
 import { OPENAI_DEFAULTS, OPENAI_MODELS, normalizeOpenAI, normalizeOpenAIState, selectedOpenAIPreset, openAIPresetDirty, loadOpenAIPreset, saveOpenAIPreset, openAIURLs, openAISize, isOpenAINovelAI, usesGPTImage, openAIQualityOptions, buildOpenAIRequest, probeOpenAIModels, filterOpenAIModels, renderOpenAIModelItems, renderOpenAIParameters, renderOpenAIPresets } from './openai.js';
 import { COMFY_FIELDS, parseWorkflow, newComfyConfig, autoMapWorkflow, mappingCandidates, normalizeComfyParams, normalizeComfyState, selectedComfyPreset, comfyPresetDirty, loadComfyPreset, saveComfyPreset, applyWorkflowParameters, normalizeComfyEndpoint, probeComfyUI, workflowWarnings, renderComfyWorkflow, renderComfyConnectionOptions, renderComfyService, renderComfyPresets } from './comfyui.js';
+import { SDWEBUI_DEFAULTS, normalizeSDWebUI, sdwebuiBase, sdwebuiHeaders, probeSDWebUI, buildSDWebUIRequest, loraPrompt } from '../sdwebui.js';
+import { normalizeSDWebUIState, selectedSDWebUIPreset, sdwebuiPresetDirty, loadSDWebUIPreset, saveSDWebUIPreset,
+  renderSDWebUIConnection, renderSDWebUIParameters, renderSDWebUIPresets } from './sdwebui.js';
 import { DrawingLibrary, normalizeSnapshot, captureSnapshot, restoreSnapshot, makeDrawing, hydrateDrawings, revokeDrawings, filterDrawings, drawingPage, renderDrawingManager, renderDrawingViewer, exportDrawings, importArchive, drawingFilename, saveBlob, formatBytes } from './drawings.js';
 import '../styles/drawings.css';
 
@@ -122,10 +148,15 @@ Object.assign(state, normalizeSettings(state));
 normalizeNovelAIState(state);
 normalizeComfyState(state);
 normalizeOpenAIState(state);
+normalizeSDWebUIState(state);
 normalizeConnections(state);
 state.artistLibrary = normalizeArtistLibrary(state.artistLibraryVersion === 1 ? state.artistLibrary
   : styles.map((style) => ({ id: style.id, name: style.title, category: '基础风格', artist: style.tags, target: 'all' })));
 state.artistLibraryVersion = 1;
+state.tagLibrary = normalizeTagLibrary(state.tagLibrary);
+state.workbench = normalizeWorkbench(state.workbench);
+state.drawingReviews = normalizeReviews(state.drawingReviews);
+state.vibeLibrary = normalizeVibeLibrary(state.vibeLibrary);
 if (!state.assistantDefaultsVersion) {
   if (state.assistant?.maxTokens === 1600) state.assistant.maxTokens = 4000;
   state.assistantDefaultsVersion = 1;
@@ -158,8 +189,9 @@ const drawingUI = {
   filters: { source: 'all', start: '', end: '', search: '', favoriteOnly: false },
   page: 1, pageSize: 24, multiselect: false, selection: new Set(),
   busy: false, loading: true, error: '',
+  exportOptions: { naming: 'index-title', metadata: 'keep' },
 };
-const viewerUI = { ids: [], index: 0, details: true, zoom: false, imageId: '', compare: false, compareId: '' };
+const viewerUI = { ids: [], index: 0, details: true, zoom: false, imageId: '', compare: false, compareId: '', review: false, reviewHistory: [] };
 let imageEditorUI = null;
 let activeJobId = null;
 let generationVerified = null;
@@ -179,8 +211,13 @@ const credentials = {
   novelai: { key: '', endpoint: '' },
   comfyui: { key: '', endpoint: '', auth: 'none' },
   openai: { key: '' },
+  sdwebui: { key: '', endpoint: '', auth: 'none' },
 };
 const referenceAssets = new ReferenceAssets({ mode: () => state.cacheLocation });
+function saveVibeLibrary(library) {
+  const previous = state.vibeLibrary; state.vibeLibrary = library;
+  try { persist(); } catch (error) { state.vibeLibrary = previous; throw error; }
+}
 const advancedPanel = new AdvancedPanel({
   assets: referenceAssets, getSnapshot: () => captureSnapshot(state),
   update: (snapshot) => {
@@ -190,13 +227,30 @@ const advancedPanel = new AdvancedPanel({
   },
   render: () => render(true), encode: encodeCurrentVibe, gallery: () => drawingGroups(drawings),
   useDrawing: materializeReferenceDrawing,
+  getVibeLibrary: () => state.vibeLibrary, setVibeLibrary: saveVibeLibrary,
 });
 const editorAdvancedPanel = new AdvancedPanel({
   id: 'editor', assets: referenceAssets, getSnapshot: () => imageEditorUI?.draft || captureSnapshot(state),
   update: (snapshot) => { if (imageEditorUI) imageEditorUI.draft = snapshot; },
   render: () => { if (imageEditorUI) showImageEditor(); }, encode: encodeCurrentVibe,
   gallery: () => drawingGroups(drawings), useDrawing: materializeReferenceDrawing,
+  getVibeLibrary: () => state.vibeLibrary, setVibeLibrary: saveVibeLibrary,
   disabled: () => !imageEditorUI || imageEditorUI.busy || imageEditorUI.submitting,
+});
+const processingPanel = new NovelAIProcessingPanel({
+  storageLocation: () => state.cacheLocation, currentParams: () => state.novelai,
+  service: () => {
+    const service = resolveNovelAIService(credentials.novelai.key, credentials.novelai.endpoint);
+    return { official: service.id === 'official', label: service.title || service.message || 'NovelAI 接口' };
+  },
+  closeTags: () => tagPanel.close(),
+  openTags: ({ target, input, visual, params, apply, closed }) => tagPanel.open({
+    target, visual, label: '图片增强草稿',
+    getContext: () => ({ provider: 'novelai', params: params() }),
+    getPreview: (edits) => visualPromptPreview({ provider: 'novelai', params: params() }, edits),
+    insert: (next) => { apply(next); input.value = next[target]; }, closed,
+  }),
+  submit: enqueueProcessing,
 });
 const credentialState = Object.fromEntries(CONNECTION_PROVIDERS.map((provider) => [provider, {
   dirty: false, revision: 0, timer: null, writing: Promise.resolve(), message: '', error: false,
@@ -204,6 +258,83 @@ const credentialState = Object.fromEntries(CONNECTION_PROVIDERS.map((provider) =
 let presetBusy = false;
 const artistUI = { search: '', category: '', favoriteOnly: false, mode: 'replace', quality: false, negative: false,
   dirty: false, draft: structuredClone(state.artistLibrary[0] || null), previewBusy: false };
+function globalTagContext() {
+  let params = state.provider === 'comfyui' ? state.comfyui.params : state[state.provider];
+  const frozen = state.characterSceneOverride;
+  if (frozen?.applied && (!state.characterSceneOverrideProvider || state.characterSceneOverrideProvider === state.provider)) {
+    params = { ...params, positive: frozen.basePositive, negative: frozen.baseNegative };
+  }
+  return { provider: state.provider, params,
+    mapping: state.comfyui.mapping };
+}
+function insertGlobalTags(params) {
+  const previous = state.provider === 'comfyui' ? state.comfyui.params : state[state.provider];
+  const previousScene = state.characterSceneOverride;
+  if (state.provider === 'comfyui') state.comfyui.params = params;
+  else state[state.provider] = params;
+  if (previousScene?.applied && (!state.characterSceneOverrideProvider || state.characterSceneOverrideProvider === state.provider)) {
+    state.characterSceneOverride = { ...previousScene, basePositive: params.positive, baseNegative: params.negative };
+  }
+  try { persist(); }
+  catch (error) {
+    if (state.provider === 'comfyui') state.comfyui.params = previous;
+    else state[state.provider] = previous;
+    state.characterSceneOverride = previousScene;
+    throw error;
+  }
+  host.querySelectorAll('textarea[data-nai], textarea[data-openai], textarea[data-comfy], textarea[data-sdwebui]').forEach((input) => {
+    const key = input.dataset.nai || input.dataset.openai || input.dataset.comfy || input.dataset.sdwebui;
+    if (['positive', 'negative', 'artist'].includes(key)) input.value = params[key] || '';
+  });
+  if (state.provider === 'novelai') updateNovelAIDirty();
+  else if (state.provider === 'openai') updateOpenAIDirty();
+  else if (state.provider === 'sdwebui') updateSDWebUIDirty();
+  else updateComfyDirty();
+}
+const tagPanel = new TagLibraryPanel({
+  getLibrary: () => state.tagLibrary,
+  setLibrary: (library) => {
+    const previous = state.tagLibrary; state.tagLibrary = library;
+    try { persist(); } catch (error) { state.tagLibrary = previous; throw error; }
+  },
+  getContext: globalTagContext, insert: insertGlobalTags, notify: toast,
+});
+
+function openPromptTools(target, input, visual = false) {
+  let picker = { target, visual, getContext: globalTagContext, insert: insertGlobalTags,
+    getPreview: (edits) => visualPromptPreview(captureSnapshot(state), edits),
+    closed: () => { if (config && host) render(true); } };
+  if (input.dataset.artistField) {
+    const draft = artistUI.draft;
+    picker = { ...picker, label: '画师串库草稿', previewTitle: '画风配方提示词',
+      getContext: () => ({ provider: 'novelai', params: { model: 'nai-diffusion-4-5-full',
+        positive: draft.quality, negative: draft.negative, artist: draft.artist },
+      limits: { positive: 4000, negative: 12000, artist: 4000 } }),
+      getPreview: null,
+      insert: (params, fields) => {
+        if (artistUI.draft !== draft) throw new Error('画师串草稿已改变，请重新打开');
+        for (const field of Array.isArray(fields) ? fields : [fields]) draft[field === 'positive' ? 'quality' : field] = params[field];
+        artistUI.dirty = true;
+      } };
+  } else if (input.dataset.profileField || input.dataset.profileOutfit) {
+    const draft = profileUI.draft, outfit = input.dataset.profileOutfit
+      ? draft?.outfits.find((row) => row.id === input.dataset.profileOutfit) : null;
+    picker = { ...picker, label: outfit ? `${outfit.name} · 服装草稿` : `${draft.name} · 档案草稿`, previewTitle: '档案草稿提示词',
+      getContext: () => ({ provider: 'novelai', params: { model: 'nai-diffusion-4-5-full',
+        positive: outfit ? outfit.prompt : draft.tags, negative: outfit ? '' : draft.negative, artist: '' },
+      allowedTargets: outfit ? ['positive'] : ['positive', 'negative'], limits: { positive: 4000, negative: 2000 } }),
+      getPreview: null,
+      insert: (params, fields) => {
+        if (profileUI.draft !== draft || outfit && !draft.outfits.includes(outfit)) throw new Error('角色档案草稿已改变，请重新打开');
+        for (const field of Array.isArray(fields) ? fields : [fields]) {
+          if (outfit) outfit.prompt = params.positive;
+          else draft[field === 'positive' ? 'tags' : field] = params[field];
+        }
+        profileUI.dirty = true;
+      } };
+  }
+  tagPanel.open(picker);
+}
 let keyVisible = false;
 let connectionStatus = { message: '等待输入秘钥', tone: 'neutral' };
 let resolvedService = null;
@@ -214,6 +345,8 @@ let novelaiAdvancedOpen = false;
 let comfyProbe = null;
 const comfyExpanded = { advanced: false, mapping: false, auth: false };
 let openaiModels = [];
+let sdwebuiProbe = null;
+let sdwebuiAdvancedOpen = false;
 const openaiModelUI = { fetched: false, open: false, query: '' };
 let openaiAdvancedOpen = false;
 let openaiTransportOpen = false;
@@ -224,6 +357,32 @@ const assistantUI = { busy: false, error: '', controller: null, key: '', keyVisi
   requestId: typeof state.assistantRequestId === 'string' ? state.assistantRequestId : null };
 const profileUI = { scope: 'global', draft: structuredClone(state.characterProfiles.profiles[0] || null),
   characters: [], dirty: false, busy: false, error: '' };
+const profileAI = new ProfileAIPanel({
+  library: () => state.characterProfiles,
+  settings: () => normalizeAssistant(state.assistant),
+  chatKey: () => currentChat().key || '',
+  directory: () => assistantHostRequest('characters', {}, { timeout: 20 }),
+  readSources: (avatars, signal) => assistantHostRequest('profile-sources', { avatars }, { signal, timeout: 20 }),
+  generate: async (messages, signal) => {
+    if (assistantUI.busy || imageEditorUI?.busy) throw new Error('文字助手正在处理其他任务，请稍后重试');
+    await saveAssistantKey(); signal.throwIfAborted();
+    const options = normalizeAssistant(state.assistant), identity = JSON.stringify(options);
+    const raw = options.source === 'api'
+      ? await requestAssistantText(options, assistantUI.key, messages, { signal })
+      : await assistantHostRequest('text', { messages }, { signal, timeout: options.timeout });
+    signal.throwIfAborted();
+    if (identity !== JSON.stringify(normalizeAssistant(state.assistant))) throw new Error('文字模型配置已改变，请重新生成草稿');
+    return raw;
+  },
+  promptTools: (picker) => tagPanel.open(picker),
+  save: ({ library, profiles }) => {
+    const previous = structuredClone(state);
+    try { state.characterProfiles = library; useLiveCharacterScene(); persist(); }
+    catch (error) { state = previous; throw error; }
+    profileUI.scope = 'global'; loadProfileDraft(profiles[0].id); render();
+    toast(`已保存 ${profiles.length} 个角色档案`);
+  },
+});
 let apiEditRevision = 0;
 let apiSyncWork = Promise.resolve();
 const chatRequests = new Map();
@@ -233,6 +392,7 @@ let processingChat = false;
 let tasksReady;
 let taskError = '';
 let taskRefreshing = false;
+let taskRefreshWork;
 const taskPersistence = new TaskPersistence({
   request: isInstalled() ? storageRequest : createBrowserTaskRequest(storageKey('linghuashi-tasks-v1')),
   settings: () => ({ generationMode: state.generationMode, queueInterval: state.queueInterval, concurrency: state.concurrency }),
@@ -245,10 +405,63 @@ const taskQueue = new GenerationQueue({
     const job = taskQueue.jobs.find((item) => item.id === activeJobId);
     if (job) runtimeState = ({ queued: 'queued', running: 'generating', completed: 'success', failed: 'error', cancelled: 'ready', paused: 'ready', uncertain: 'error' })[job.status] || 'ready';
     for (const item of taskQueue.jobs) reportChatTask(item);
+    externalTaskService.report(chatPost);
     if (host) render();
   },
   cancel: cancelComfyPending,
   persistence: taskPersistence,
+});
+const externalTaskService = createExtensionTaskService({
+  queue: taskQueue, state: () => state,
+  ready: async () => { await libraryReady; await tasksReady; },
+  refresh: async () => {
+    if (workbenchPanel.ui.busy) throw apiError('BUSY', '正在保存组合任务，请稍后重试');
+    await refreshTasks();
+    if (taskError) throw apiError('STORAGE_UNAVAILABLE', taskError);
+  },
+  prepare: prepareExternalGeneration,
+  create: async (plan, id) => {
+    const record = await taskPersistence.create(plan, id);
+    const chat = chatRequests.get(plan.chatRequestId);
+    if (chat) chat.jobId = record.id;
+    return record;
+  },
+  abandon: (plan, error) => {
+    if (plan.chatRequestId) {
+      chatPost('linghuashi:chat-task', { requestId: plan.chatRequestId, binding: plan.chatBinding,
+        status: error.name === 'AbortError' ? 'cancelled' : 'failed', error: error.message });
+      chatRequests.delete(plan.chatRequestId);
+    }
+  },
+  result: async (job) => {
+    const saved = await drawingLibrary.list(job.plan.storageLocation);
+    const rows = (job.savedIds || []).map((id) => saved.find((row) => row.id === id));
+    if (!rows.length || rows.some((row) => !row)) throw apiError('RESULT_UNAVAILABLE', '结果图片已清理或位于其他设备', job.id);
+    return { task: publicExtensionTask(job), images: rows.map((row) => ({
+      id: row.id, width: row.width, height: row.height, mime: row.blob.type,
+      storageLocation: job.plan.storageLocation, parameters: publicImageParameters(row.snapshot),
+      ...(job.plan.storageLocation === 'server' ? { url: row.srcURL, thumbnailUrl: row.thumbnailURL }
+        : { blob: row.blob, thumbnail: row.thumbnail }),
+    })) };
+  },
+  capabilities: () => extensionCapabilities(state, credentials),
+  presets: (provider) => extensionPresets(state, provider),
+});
+const workbenchPanel = new WorkbenchPanel({
+  getDraft: () => state.workbench,
+  setDraft: (draft) => { const previous = state.workbench; state.workbench = draft; try { persist(); } catch (error) { state.workbench = previous; throw error; } },
+  getSnapshot: () => captureSnapshot(state),
+  cards: () => allTagTemplates(state.tagLibrary), artists: () => state.artistLibrary,
+  identity: () => JSON.stringify([captureSnapshot(state), state.connections[state.provider], credentialState[state.provider].revision, state.cacheLocation]),
+  submit: enqueueBatch, jobs: () => taskQueue.jobs, queue: taskQueue,
+  saveCandidate: (name, row, preview) => {
+    if (!row.candidate) throw new Error('候选组合不存在，请重新预览');
+    const previous = state.artistLibrary;
+    state.artistLibrary = saveArtist(previous, { id: crypto.randomUUID(), name, category: '画风探索',
+      ...row.candidate, target: preview.rows[0].snapshot.provider });
+    try { persist(); } catch (error) { state.artistLibrary = previous; throw error; }
+  },
+  render: () => render(true),
 });
 const backupPanel = new BackupPanel({
   getState: () => state, getLayout: () => config,
@@ -259,7 +472,7 @@ const backupPanel = new BackupPanel({
     await saveAssistantKey(); persist();
   },
   active: () => taskQueue.jobs.some((job) => ['running', 'queued'].includes(job.status))
-    || assistantUI.busy || imageEditorUI?.busy || imageEditorUI?.submitting || presetBusy,
+    || assistantUI.busy || imageEditorUI?.busy || imageEditorUI?.submitting || processingPanel.busy || presetBusy || workbenchPanel.ui.busy,
   tasks: () => taskPersistence.list(),
   applyState: async (next) => {
     const previous = state;
@@ -350,6 +563,7 @@ function syncConnection(provider) {
     } : {
       endpoint: credentials[provider].endpoint,
       ...(provider === 'comfyui' ? { auth: credentials.comfyui.auth, timeout: state.comfyTimeout } : {}),
+      ...(provider === 'sdwebui' ? { auth: credentials.sdwebui.auth } : {}),
     }),
   });
 }
@@ -500,7 +714,7 @@ async function analyzeChat(request) {
     const result = await runPromptAssistant('illustrate', request);
     request.assistantPlan = result.plan; request.assistantOptions = result.options;
     request.assistantSnapshot = result.snapshot;
-    const generating = result.plan.shouldDraw && normalizeAssistant(state.assistant).autoImage;
+    const generating = result.plan.shouldDraw && !request.openEditor && normalizeAssistant(state.assistant).autoImage;
     if (request.openEditor) {
       assistantUI.binding = request.binding; assistantUI.requestId = request.requestId;
       state.assistantBinding = request.binding; state.assistantRequestId = request.requestId;
@@ -572,6 +786,7 @@ function updateCredentialStatus() {
     updateNovelAIDirty();
     updateOpenAIDirty();
     updateComfyDirty();
+    updateSDWebUIDirty();
   }
 }
 
@@ -621,7 +836,7 @@ async function presetOperation(operation) {
 async function saveCurrentPreset(provider, name) {
   return presetOperation(async () => {
     await saveConnection(provider);
-    const save = { novelai: saveNovelAIPreset, openai: saveOpenAIPreset, comfyui: saveComfyPreset }[provider];
+    const save = { novelai: saveNovelAIPreset, openai: saveOpenAIPreset, comfyui: saveComfyPreset, sdwebui: saveSDWebUIPreset }[provider];
     const preset = save(state, name);
     persist();
     updateCredentialStatus();
@@ -632,12 +847,12 @@ async function saveCurrentPreset(provider, name) {
 async function loadCurrentPreset(provider, id) {
   return presetOperation(async () => {
     await saveConnection(provider);
-    const list = state[{ novelai: 'novelaiPresets', openai: 'openaiPresets', comfyui: 'comfyPresets' }[provider]];
+    const list = state[{ novelai: 'novelaiPresets', openai: 'openaiPresets', comfyui: 'comfyPresets', sdwebui: 'sdwebuiPresets' }[provider]];
     const preset = list.find((item) => item.id === id);
     const connection = resolvePresetConnection(state, provider, preset);
     const key = connection
       ? await credentialRequest('read', provider, { ref: connection.keyRef }) : credentials[provider].key;
-    const load = { novelai: loadNovelAIPreset, openai: loadOpenAIPreset, comfyui: loadComfyPreset }[provider];
+    const load = { novelai: loadNovelAIPreset, openai: loadOpenAIPreset, comfyui: loadComfyPreset, sdwebui: loadSDWebUIPreset }[provider];
     load(state, id);
     if (connection) {
       Object.assign(credentials[provider], {
@@ -657,8 +872,8 @@ async function loadCurrentPreset(provider, id) {
   });
 }
 
-function renderPresets() {
-  return ({ novelai: renderNovelAIPresets, openai: renderOpenAIPresets, comfyui: renderComfyPresets })[state.provider](state)
+function renderPresets(actions = '') {
+  return ({ novelai: renderNovelAIPresets, openai: renderOpenAIPresets, comfyui: renderComfyPresets, sdwebui: renderSDWebUIPresets })[state.provider](state, actions)
     + renderPresetBinding(state);
 }
 
@@ -674,10 +889,11 @@ function updateTriggerFormat() {
 function resultMedia(chat = false) {
   const job = taskQueue.jobs.find((item) => item.id === activeJobId);
   if (runtimeState === 'error') return `<div class="result-placeholder result-error">${chibi('sad', 'status-mascot')}<strong>生成失败</strong><span>${esc(job?.error || '服务暂时没有响应')}</span>${job?.execution ? button('download', '继续取图 / 保存', 'task-retry', 'secondary', `data-task="${job.id}"`) : button('refresh-cw', '重新生成', 'generate', 'secondary')}</div>`;
-  if (runtimeState === 'queued') return `<div class="result-placeholder">${chibi('deadpan', 'status-mascot')}<strong>正在等待生成</strong><span>等待调度 · ${taskQueue.jobs.filter((item) => item.status === 'queued').length} 个等待任务</span>${button('x', '取消任务', 'cancel', 'secondary')}</div>`;
-  if (runtimeState === 'generating') {
-    const progress = job?.progress, percent = progress?.max ? Math.max(0, Math.min(100, progress.value / progress.max * 100)) : null;
-    return `<div class="result-placeholder">${chibi('thinking', 'status-mascot')}<strong>正在绘制画面</strong><span>${esc(taskPhase(job?.phase))}${progress?.node ? ` · 节点 #${esc(progress.node)}` : ''}${percent !== null ? ` · ${progress.value} / ${progress.max}` : ''}</span><div class="progress-track ${percent === null ? 'task-indeterminate' : ''}"><span ${percent !== null ? `style="width:${percent}%"` : ''}></span></div>${button('x', '取消任务', 'cancel', 'secondary', job?.phase === 'saving' ? 'disabled' : '')}</div>`;
+  if (runtimeState === 'queued' || runtimeState === 'generating') {
+    const previous = activeDrawing();
+    const task = job || { status: runtimeState === 'queued' ? 'queued' : 'running', phase: 'submitting' };
+    const actions = iconButton('x', '取消任务', 'cancel', task.phase === 'saving' ? 'disabled' : '');
+    return `${previous ? `<button type="button" class="image-open" data-action="viewer" data-image="${previous.id}" aria-label="查看原图"><img src="${previous.src}" alt="${esc(previous.title)}" /></button>` : ''}${renderGenerationTransition({ theme: state.characterTheme, task, compact: Boolean(previous), remote: job?.remote === true, actions })}`;
   }
   if (isInstalled() && !activeDrawing()) return `<div class="result-placeholder">${chibi('thinking', 'status-mascot')}<strong>等待第一张绘图</strong>${button('plug', '接口配置', 'connection', 'secondary', 'data-page="connection"')}</div>`;
   const image = activeDrawing() || activeSample;
@@ -691,17 +907,17 @@ function renderGenerate() {
   return `<div class="page-heading"><div><h1>生图工坊</h1><p>${session}</p></div><div class="heading-actions">${iconButton('plug', '接口配置', 'connection', 'data-page="connection"')}</div></div>
     <div class="generation-workspace">
       <section class="prompt-area">
-        ${renderPresets()}
+        ${renderPresets(`<button type="button" class="ui-button secondary" data-page="batch">${icon('grid-2x2')}组合生图</button>`)}
         ${field('生图接口', `<select data-setting="provider">${GENERATION_MODES.map((mode) => `<option value="${mode.id}" ${state.provider === mode.id ? 'selected' : ''}>${mode.title}</option>`).join('')}</select>`)}
         ${renderNamedConnections(state)}
         ${renderArtistQuickPick(state)}
         ${advancedPanel.html()}
-        ${novelai ? renderNovelAIParameters(state, novelaiAdvancedOpen) : openai ? renderOpenAIParameters(state, openaiModels, openaiAdvancedOpen, { ...openaiModelUI, loading: connectionStatus.tone === 'pending' }) : renderComfyWorkflow(state, comfyProbe, comfyExpanded)}
+        ${novelai ? renderNovelAIParameters(state, novelaiAdvancedOpen) : openai ? renderOpenAIParameters(state, openaiModels, openaiAdvancedOpen, { ...openaiModelUI, loading: connectionStatus.tone === 'pending' }) : state.provider === 'sdwebui' ? renderSDWebUIParameters(state, sdwebuiProbe, sdwebuiAdvancedOpen) : renderComfyWorkflow(state, comfyProbe, comfyExpanded)}
         ${renderCharacterSelection(state, currentChat(), { frozen: Boolean(state.characterSceneOverride?.entries?.length) })}
       </section>
       <section class="result-area">
         <div class="field-heading"><h2>生成结果</h2>${statusBadge()}</div>
-        <div class="result-frame">${resultMedia()}</div>
+        <div class="result-frame${runtimeState === 'queued' || runtimeState === 'generating' ? ' result-frame--pending' : ''}">${resultMedia()}</div>
         <div class="result-actions"><span>${activeDrawing()?.demo ? '示例图片' : activeDrawing() ? '当前图片' : ''}</span><div>${iconButton('star', '收藏图片', 'favorite', `aria-pressed="${activeDrawing()?.favorite || false}"`)}${iconButton('arrow-down-to-line', '下载图片', 'download')}${iconButton('expand', '查看大图', 'viewer')}</div></div>
         ${renderResultDetails()}
         <div class="recent-heading"><h2>最近图片</h2><button type="button" class="text-button" data-page="gallery">绘图管理${icon('arrow-right')}</button></div>
@@ -711,7 +927,7 @@ function renderGenerate() {
 }
 
 function taskPhase(phase) {
-  return ({ waiting: '等待调度', preparing: '正在读取参考素材', submitting: '正在提交请求', retrieving: '正在读取生成结果',
+  return ({ waiting: '等待调度', preparing: '正在读取参考素材', submitting: '正在提交请求', generating: '服务正在生成', retrieving: '正在读取生成结果',
     downloading: '正在下载图片', saving: '正在存入绘图管理', done: '已保存' })[phase] || '服务正在生成';
 }
 
@@ -721,7 +937,7 @@ function renderTasks() {
     <div class="field-heading"><h2>任务与请求记录</h2><div class="task-actions">${iconButton('refresh-cw', '刷新任务记录', 'task-refresh')}${iconButton('trash-2', '清理已完成和已关闭记录', 'task-clear')}${iconButton('download', '导出请求记录', 'task-export')}</div></div>
     ${taskError ? `<p class="task-empty" role="status">${esc(taskError)}</p>` : ''}
     ${taskQueue.jobs.length ? `<div class="task-list">${[...taskQueue.jobs].reverse().map((job) => `<div class="task-row">
-      <div><strong>${esc(job.plan.model)}</strong><span>${labels[job.status]}${job.remote ? ' · 其他页面执行中' : ''} · ${esc(job.error || taskPhase(job.phase))}${job.imageCount ? ` · ${job.imageCount} 张` : ''}</span><span>${job.plan.storageLocation === 'server' ? '酒馆服务器' : '浏览器图片库'} · ${new Date(job.createdAt).toLocaleString()}</span></div>
+      <div><strong>${job.plan.snapshot?.novelaiProcessing ? `${esc(processingTitle(job.plan.snapshot.novelaiProcessing))} · ` : ''}${esc(job.plan.model)}</strong><span>${labels[job.status]}${job.remote ? ' · 其他页面执行中' : ''} · ${esc(job.error || taskPhase(job.phase))}${job.imageCount ? ` · ${job.imageCount} 张` : ''}</span><span>${job.plan.snapshot?.extensionRequest ? `来自 ${esc(job.plan.snapshot.extensionRequest.source.name)} · ` : ''}${job.plan.storageLocation === 'server' ? '酒馆服务器' : '浏览器图片库'} · ${new Date(job.createdAt).toLocaleString()}</span></div>
       ${job.finishedAt && job.startedAt ? `<span class="task-duration">${((job.finishedAt - job.startedAt) / 1000).toFixed(1)} 秒</span>` : ''}
       <div class="task-actions">${(['failed', 'paused'].includes(job.status) || job.status === 'uncertain' && job.execution) && (job.execution || job.stage === 'waiting') ? iconButton(job.execution ? 'download' : 'play', job.execution ? '继续取图或保存' : '继续提交此任务', 'task-retry', `data-task="${job.id}"`) : ''}
       ${iconButton('sliders-horizontal', '载入此任务的参数', 'task-parameters', `data-task="${job.id}"`)}
@@ -742,7 +958,7 @@ function renderResultDetails() {
     ['尺寸', item?.size || `${params.width} × ${params.height}`],
     ['采样', `${params.steps} steps · CFG ${params.scale}`],
   ] : [
-    ['模型', params.checkpoint || snapshot.config.name],
+    ['模型', params.model || params.checkpoint || snapshot.config?.name || '跟随服务当前模型'],
     ['尺寸', item?.size || `${params.width} × ${params.height}`],
     ['采样', `${params.steps} steps · CFG ${params.cfg}`],
   ];
@@ -758,16 +974,16 @@ function renderConnection() {
       ${renderPresets()}
       <div class="provider-options">${GENERATION_MODES.map((mode) => `<button type="button" data-provider="${mode.id}" class="${state.provider === mode.id ? 'selected' : ''}" aria-pressed="${state.provider === mode.id}">${icon(mode.icon)}<span><strong>${mode.title}</strong><small>${mode.subtitle}</small></span>${icon('check')}</button>`).join('')}</div>
       ${renderNamedConnections(state, true)}
-      ${novelai ? `<p class="provider-website">官方网站：<a href="https://novelai.net/" target="_blank" rel="noopener noreferrer">https://novelai.net/${icon('external-link')}</a></p>` : openai ? renderOpenAIConnection() : `${field('ComfyUI 服务地址', `<input type="url" data-transient="endpoint" placeholder="https://你的域名/comfyui" value="${esc(current.endpoint)}" />`)}<p class="comfy-note">填写 ComfyUI 服务的根地址；127.0.0.1 指当前浏览器所在电脑。远程服务需允许当前页面跨域访问，HTTPS 页面建议使用 HTTPS 服务地址。</p>${renderComfyConnectionOptions(state, current, comfyExpanded.auth, keyVisible)}`}
+      ${novelai ? `<p class="provider-website">官方网站：<a href="https://novelai.net/" target="_blank" rel="noopener noreferrer">https://novelai.net/${icon('external-link')}</a></p>` : openai ? renderOpenAIConnection() : state.provider === 'sdwebui' ? renderSDWebUIConnection({ ...state.connections.sdwebui, ...current }, renderKeyInput(current.auth === 'basic' ? 'SDWebUI 密码' : '访问令牌')) : `${field('ComfyUI 服务地址', `<input type="url" data-transient="endpoint" placeholder="https://你的域名/comfyui" value="${esc(current.endpoint)}" />`)}<p class="comfy-note">填写 ComfyUI 服务的根地址；127.0.0.1 指当前浏览器所在电脑。远程服务需允许当前页面跨域访问，HTTPS 页面建议使用 HTTPS 服务地址。</p>${renderComfyConnectionOptions(state, current, comfyExpanded.auth, keyVisible)}`}
       ${novelai ? field('API Key', renderKeyInput('pst- / sk- / STD- 秘钥', 'aria-describedby="novelai-key-help"')) : ''}
-      <p class="credential-status" data-credential-status role="status" aria-live="polite"></p>
+      ${state.provider === 'sdwebui' ? '' : '<p class="credential-status" data-credential-status role="status" aria-live="polite"></p>'}
       ${novelai ? `<div class="connection-help" id="novelai-key-help"><p>支持自动识别官方秘钥(pst-xxxx)和部分第三方秘钥(常用为sk-xxxx)</p><p>支持蛋糕生图、砂糖绘画；砂糖同时支持 STD 开头的秘钥。</p></div>
       <details class="advanced-options endpoint-options" ${addressExpanded ? 'open' : ''}><summary>${icon('link')}第三方接口地址(可选)${icon('chevron-down')}</summary><div>${field('第三方接口地址(可选)', `<input type="url" autocomplete="off" data-transient="endpoint" placeholder="https://第三方域名" value="${esc(current.endpoint)}" />`)}<p class="endpoint-help">留空自动识别；填写后优先用于第三方秘钥。pst- 秘钥始终使用官方接口。</p></div></details>` : ''}
       <div class="connection-actions" ${openai ? 'data-openai-connection-actions' : ''}><span id="connection-status" data-connection-status role="status" aria-live="polite"></span><div class="connection-buttons">${button('plug', '测试连接', 'test-connection', 'secondary')}</div></div>
       <p class="resolved-endpoint" data-resolved-endpoint></p>
       ${advancedPanel.html()}
       ${novelai ? `<div class="section-rule"></div>${renderNovelAIParameters(state, novelaiAdvancedOpen)}` : ''}
-      ${openai ? `<div class="section-rule"></div>${renderOpenAIParameters(state, openaiModels, openaiAdvancedOpen, { ...openaiModelUI, loading: connectionStatus.tone === 'pending' })}` : !novelai ? `${renderComfyService(comfyProbe)}<div class="section-rule"></div>${renderComfyWorkflow(state, comfyProbe, comfyExpanded)}` : ''}
+      ${openai ? `<div class="section-rule"></div>${renderOpenAIParameters(state, openaiModels, openaiAdvancedOpen, { ...openaiModelUI, loading: connectionStatus.tone === 'pending' })}` : state.provider === 'sdwebui' ? `<div class="section-rule"></div>${renderSDWebUIParameters(state, sdwebuiProbe, sdwebuiAdvancedOpen)}` : !novelai ? `${renderComfyService(comfyProbe)}<div class="section-rule"></div>${renderComfyWorkflow(state, comfyProbe, comfyExpanded)}` : ''}
     </section>`;
 }
 
@@ -1109,12 +1325,82 @@ function updateConnectionStatus() {
   if (fetchModels) fetchModels.disabled = connectionStatus.tone === 'pending';
 }
 
+function updateSDWebUIDirty() {
+  host?.querySelectorAll('[data-sdwebui-dirty]').forEach((node) => { node.textContent = sdwebuiPresetDirty(state) ? '有未保存修改' : '已保存'; });
+}
+
+function commitSDWebUIFields() {
+  state.sdwebui = normalizeSDWebUI(state.sdwebui);
+  host?.querySelectorAll('[data-sdwebui]').forEach((node) => {
+    if (node.type === 'checkbox') node.checked = state.sdwebui[node.dataset.sdwebui];
+    else node.value = state.sdwebui[node.dataset.sdwebui];
+  });
+  persist(); updateSDWebUIDirty();
+}
+
+function openSDWebUIPresetDialog(deleting = false) {
+  const selected = selectedSDWebUIPreset(state);
+  if (deleting && selected.id === 'default') return;
+  const overlay = document.getElementById('overlay-root');
+  overlay.innerHTML = `<dialog class="nai-preset-dialog" aria-label="${deleting ? '删除预设' : '另存为预设'}"><form>
+    <header><h2>${deleting ? '删除预设' : '另存为预设'}</h2>${iconButton('x', '关闭', 'sdwebui-dialog-close')}</header>
+    ${deleting ? `<p>删除“${esc(selected.name)}”？当前参数保留。</p>` : field('预设名称', '<input name="name" maxlength="40" required autocomplete="off" />')}
+    <p class="nai-dialog-error" role="alert"></p><footer>${button('x', '取消', 'sdwebui-dialog-close', 'secondary')}
+    <button type="submit" class="ui-button primary">${icon(deleting ? 'trash-2' : 'save')}<span>${deleting ? '删除' : '保存新预设'}</span></button></footer></form></dialog>`;
+  const dialog = overlay.querySelector('dialog');
+  dialog.querySelectorAll('[data-action="sdwebui-dialog-close"]').forEach((node) => node.addEventListener('click', () => dialog.close()));
+  dialog.addEventListener('close', () => dialog.remove(), { once: true });
+  dialog.querySelector('form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const previous = structuredClone({ presets: state.sdwebuiPresets, id: state.sdwebuiPresetId });
+    try {
+      if (deleting) { state.sdwebuiPresets = state.sdwebuiPresets.filter((item) => item.id !== selected.id); state.sdwebuiPresetId = 'default'; persist(); }
+      else await saveCurrentPreset('sdwebui', String(new FormData(event.target).get('name')));
+      dialog.close(); render(); toast(deleting ? '预设已删除' : '预设已保存');
+    } catch (error) {
+      state.sdwebuiPresets = previous.presets; state.sdwebuiPresetId = previous.id;
+      dialog.querySelector('.nai-dialog-error').textContent = error.message;
+    }
+  });
+  paintIcons(); dialog.showModal();
+}
+
+async function checkSDWebUIConnection(test) {
+  if (!test) {
+    connectionStatus = { message: credentials.sdwebui.endpoint.trim() ? '地址已填写，尚未测试' : '等待输入 SDWebUI 服务地址', tone: 'neutral' };
+    updateConnectionStatus(); return;
+  }
+  const controller = new AbortController(); connectionController = controller;
+  const timeout = setTimeout(() => controller.abort(), 20000);
+  connectionStatus = { message: '正在读取模型、LoRA 和参数列表…', tone: 'pending' }; updateConnectionStatus();
+  try {
+    const base = sdwebuiBase(credentials.sdwebui.endpoint);
+    if (location.protocol === 'https:' && new URL(base).protocol === 'http:'
+      && !['127.0.0.1', 'localhost', '[::1]'].includes(new URL(base).hostname)) throw new Error('当前酒馆使用 HTTPS，请为远程 SDWebUI 配置 HTTPS 地址');
+    const result = await probeSDWebUI(base, state.connections.sdwebui, credentials.sdwebui.key, { signal: controller.signal });
+    if (connectionController !== controller || state.provider !== 'sdwebui') return;
+    sdwebuiProbe = result;
+    Object.assign(state.connections.sdwebui, { textTaskId: result.textTaskId, imageTaskId: result.imageTaskId, progressMode: result.progressMode });
+    persist();
+    connectionStatus = { message: `SDWebUI 已连接 · ${result.models.length} 个模型${result.unavailable.length ? ' · 部分可选列表不可用' : ''}`, tone: 'success' };
+    render();
+  } catch (error) {
+    if (connectionController !== controller) return;
+    connectionStatus = { message: controller.signal.aborted ? '连接超时，请检查服务地址和网络'
+      : error instanceof TypeError ? '无法连接 SDWebUI，请检查地址、HTTPS 和跨域设置' : error.message, tone: 'error' };
+  } finally {
+    clearTimeout(timeout);
+    if (connectionController === controller) { connectionController = null; updateConnectionStatus(); }
+  }
+}
+
 function resetConnection({ keepOpenAIModels = false } = {}) {
   clearTimeout(connectionTimer);
   connectionController?.abort();
   connectionController = null;
   resolvedService = null;
   comfyProbe = null;
+  sdwebuiProbe = null;
   if (!keepOpenAIModels) {
     openaiModels = [];
     Object.assign(openaiModelUI, { fetched: false, open: false, query: '' });
@@ -1164,6 +1450,7 @@ async function checkConnection(test = false, keepModels = false) {
   if (provider === 'comfyui') {
     return checkComfyConnection(current, test);
   }
+  if (provider === 'sdwebui') return checkSDWebUIConnection(test);
   const route = resolveNovelAIService(current.key, current.endpoint);
   if (route.kind !== 'resolved' && route.kind !== 'identify') {
     connectionStatus = { message: route.message, tone: route.kind === 'error' ? 'error' : 'neutral' };
@@ -1268,7 +1555,7 @@ function discardProfileChanges() {
 function useLiveCharacterScene() {
   const frozen = state.characterSceneOverride;
   if (frozen?.applied && (!state.characterSceneOverrideProvider || state.characterSceneOverrideProvider === state.provider)) {
-    const params = state.provider === 'novelai' ? state.novelai : state.provider === 'openai' ? state.openai : state.comfyui.params;
+    const params = state.provider === 'comfyui' ? state.comfyui.params : state[state.provider];
     params.positive = frozen.basePositive; params.negative = frozen.baseNegative;
   }
   state.characterSceneOverride = null;
@@ -1457,14 +1744,17 @@ function renderGallery() {
   return renderDrawingManager(drawings, drawingUI);
 }
 
+const changelogPanel = new ChangelogPanel();
+
 function renderConsole() {
-  const renderer = { settings: () => renderSettings(state, backupPanel.html()), assistant: () => renderAssistant(state, assistantUI), generate: renderGenerate, connection: renderConnection, characters: renderCharacters, styles: renderStyles, gallery: renderGallery }[state.page] || (() => renderSettings(state, backupPanel.html()));
+  const renderer = { settings: () => renderSettings(state, backupPanel.html()), assistant: () => renderAssistant(state, assistantUI), generate: renderGenerate, batch: () => workbenchPanel.html() + renderTasks(), connection: renderConnection, characters: renderCharacters, styles: renderStyles, tags: () => tagPanel.html(), gallery: renderGallery, changelog: () => changelogPanel.html() }[state.page] || (() => renderSettings(state, backupPanel.html()));
+  const navigationPage = state.page === 'batch' ? 'generate' : state.page;
   const busy = ['queued', 'generating'].includes(runtimeState);
   const sessionName = isInstalled() ? esc(currentChat().name) : '林间的旅人';
   const sessionCount = isInstalled() ? currentChat().count : 12;
   return `<div class="plugin-shell">
     <header class="plugin-header"><div class="plugin-brand"><span class="brand-mark">${pluginIcon(state.characterTheme)}</span><div class="brand-copy"><strong>${esc(config.name)}</strong><span class="brand-subtitle">一款对萌新友好的生图扩展插件，愿世间充满和平友爱~</span></div></div><div class="plugin-header-right"><span class="session-label">${icon('message-square')}${sessionName}</span>${iconButton('more-horizontal', '更多操作', 'more')}</div></header>
-    <div class="plugin-body"><nav class="plugin-nav" aria-label="插件导航"><span class="nav-caption">工作空间</span>${navigation.map((item) => `<button type="button" data-page="${item.id}" class="${state.page === item.id ? 'active' : ''}" aria-current="${state.page === item.id ? 'page' : 'false'}">${icon(item.icon)}<span>${item.title}</span>${item.id === 'gallery' ? `<small>${state.history.length}</small>` : ''}</button>`).join('')}<div class="nav-bottom"><span class="connection-dot"></span><span>生图工坊</span><small>${RELEASE.version}</small></div></nav><main class="plugin-content">${renderer()}</main></div>
+    <div class="plugin-body"><nav class="plugin-nav" aria-label="插件导航"><span class="nav-caption">工作空间</span>${navigation.map((item) => `<button type="button" data-page="${item.id}" class="${navigationPage === item.id ? 'active' : ''}" aria-current="${navigationPage === item.id ? 'page' : 'false'}">${icon(item.icon)}<span>${item.title}</span>${item.id === 'gallery' ? `<small>${state.history.length}</small>` : ''}</button>`).join('')}<div class="nav-bottom"><span class="connection-dot"></span><span>生图工坊</span><small>${RELEASE.version}</small></div></nav><main class="plugin-content">${renderer()}</main></div>
     <footer class="plugin-bottom"><span>${icon(state.enabled ? 'circle-check' : 'circle')}${!state.enabled ? '插件已关闭' : state.page === 'generate' ? GENERATION_MODES.find((mode) => mode.id === state.provider)?.title || '自定义接口' : '配置已载入'}</span><div class="bottom-actions"><span>当前会话 · ${sessionCount} 条消息</span>${state.page === 'generate' ? button('sparkles', !state.enabled ? '插件已关闭' : busy ? '加入队列' : '生成图像', 'generate', 'primary', !state.enabled ? 'disabled' : '') : ''}</div></footer>
   </div>`;
 }
@@ -1482,7 +1772,7 @@ function renderChat() {
       <article class="chat-message character-message"><div class="message-avatar character">${icon('sparkles')}</div><div class="message-body"><div class="message-meta"><strong>旅人</strong><time>20:31</time><span>#12</span></div><p>他停下脚步，拨开眼前低垂的枝叶。</p><p>薄雾在湖面缓缓散开，远山映在水里。岸边的木屋亮着暖色的灯，松林间传来很轻的风声。</p><p class="dialogue">“今晚就在这里歇一歇吧。”</p>
         <section class="chat-image-card"><div class="chat-image-heading"><span>${renderChatBrand()}</span><div class="chat-drawing-status">${chibi(statusPose(), 'chat-mascot')}${statusBadge()}</div></div><div class="chat-image-content">${resultMedia(true)}</div>
           <div class="chat-card-actions"><button type="button" class="text-button" data-action="edit-prompt">${icon('sliders-horizontal')}提示词</button><div>${iconButton('star', '收藏图片', 'favorite')}${iconButton('arrow-down-to-line', '下载图片', 'download')}${iconButton('refresh-cw', '重新生成', 'generate')}</div></div>
-          ${editPrompt ? `<div class="chat-prompt-editor"><textarea aria-label="聊天图片提示词" ${state.provider === 'novelai' ? 'data-nai="positive"' : state.provider === 'openai' ? 'data-openai="positive"' : `data-comfy="positive" ${state.comfyui.mapping.positive ? '' : 'disabled'}`}>${esc(state.provider === 'novelai' ? state.novelai.positive : state.provider === 'openai' ? state.openai.positive : state.comfyui.params.positive)}</textarea>${state.provider === 'openai' && isOpenAINovelAI(state.openai.model) ? field('负面提示词', `<textarea rows="3" aria-label="聊天图片负面提示词" data-openai="negative" maxlength="32000" spellcheck="false">${esc(state.openai.negative)}</textarea>`) : ''}${button('sparkles', '生成图像', 'generate', 'primary')}</div>` : ''}
+          ${editPrompt ? `<div class="chat-prompt-editor"><textarea aria-label="聊天图片提示词" ${state.provider === 'novelai' ? 'data-nai="positive"' : state.provider === 'openai' ? 'data-openai="positive"' : state.provider === 'sdwebui' ? 'data-sdwebui="positive"' : `data-comfy="positive" ${state.comfyui.mapping.positive ? '' : 'disabled'}`}>${esc(state.provider === 'comfyui' ? state.comfyui.params.positive : state[state.provider].positive)}</textarea>${state.provider === 'openai' && isOpenAINovelAI(state.openai.model) ? field('负面提示词', `<textarea rows="3" aria-label="聊天图片负面提示词" data-openai="negative" maxlength="32000" spellcheck="false">${esc(state.openai.negative)}</textarea>`) : ''}${button('sparkles', '生成图像', 'generate', 'primary')}</div>` : ''}
         </section><div class="message-tools">${iconButton('copy', '复制消息', 'copy-message')}${iconButton('refresh-cw', '重新生成图片', 'generate')}<span>1 / 1</span></div>
       </div></article>
     </main>
@@ -1516,6 +1806,10 @@ function render(force = false) {
     && editing?.matches('[data-backup-field="password"]')) return;
   if (!force && host.dataset.renderedPage === 'styles' && state.page === 'styles'
     && editing?.matches('[data-artist-field], [data-artist-search]')) return;
+  if (!force && host.dataset.renderedPage === 'tags' && state.page === 'tags'
+    && editing?.closest('[data-tag-root]')) return;
+  if (!force && host.dataset.renderedPage === 'batch' && state.page === 'batch'
+    && editing?.closest('[data-batch-root]')) return;
   if (!force && host.dataset.renderedPage === state.page && ['characters', 'assistant'].includes(state.page)
     && editing?.matches('input[data-profile-field], textarea[data-profile-field], [data-profile-outfit], input[data-participant-field], [data-assistant-character]')
     && !['checkbox', 'select-one'].includes(editing.type)) return;
@@ -1526,6 +1820,7 @@ function render(force = false) {
   const content = host.querySelector('.plugin-content');
   const scrollTop = content?.scrollTop || 0;
   const samePage = host.dataset.renderedPage === state.page && host.dataset.renderedSurface === config.surface;
+  changelogPanel.capture(host);
   applyTokens();
   host.innerHTML = config.surface === 'chat' ? renderChat() : renderConsole();
   decoratePageHeading();
@@ -1553,6 +1848,10 @@ function render(force = false) {
   advancedPanel.objectInfo = comfyProbe?.objectInfo;
   advancedPanel.bind(host);
   backupPanel.bind(host);
+  changelogPanel.bind(host);
+  tagPanel.bind(host);
+  workbenchPanel.bind(host);
+  attachPromptTagButtons(host, openPromptTools);
   } finally { rendering = false; }
 }
 
@@ -1594,7 +1893,7 @@ export function showSettings() {
 }
 
 export function showPage(page) {
-  if (!['settings', 'generate', 'gallery', 'assistant', 'characters', 'styles', 'connection'].includes(page)) return;
+  if (!['settings', 'generate', 'batch', 'gallery', 'assistant', 'characters', 'styles', 'tags', 'connection', 'changelog'].includes(page)) return;
   state.page = page;
   persist(); render();
   if (page === 'assistant' && state.assistant.source === 'tavern' && isInstalled()) void fetchAssistantModels(false);
@@ -1613,6 +1912,7 @@ export function applyHostContext(chat) {
   const changed = currentChat().key !== chat?.key;
   window.__LINGHUASHI_ENV__.chat = chat;
   if (changed) {
+    profileAI.invalidate();
     useLiveCharacterScene();
     if (profileUI.scope === 'chat' && !profileUI.dirty) loadProfileDraft();
     if (state.page === 'characters') void refreshProfileCards();
@@ -1633,7 +1933,10 @@ async function reloadDrawings() {
     const location = state.cacheLocation;
     const rows = await drawingLibrary.list(location);
     if (location !== state.cacheLocation) return;
-    const next = hydrateDrawings(rows).sort((left, right) => right.createdAt - left.createdAt);
+    const existingIds = new Set(rows.map((row) => row.id));
+    state.drawingReviews = normalizeReviews(Object.fromEntries(Object.entries(state.drawingReviews)
+      .filter(([key]) => !key.startsWith(`${location}:`) || existingIds.has(key.slice(location.length + 1)))));
+    const next = hydrateDrawings(rows).map((row) => ({ ...row, rating: reviewValue(state.drawingReviews, location, row.id) })).sort((left, right) => right.createdAt - left.createdAt);
     const previous = drawings;
     const selectedGroups = new Set(previous.filter((row) => drawingUI.selection.has(row.id)).map(versionGroupId));
     drawings = next;
@@ -1757,7 +2060,12 @@ async function migrateBrowserImages() {
     if (!window.confirm(`将 ${rows.length} 张浏览器图片和参数复制到当前酒馆账号。原浏览器图片保留；再次迁移会跳过已保存的图片。继续吗？`)) return;
     let completed = 0;
     for (const row of rows) {
-      try { await drawingLibrary.add([row], 'server'); completed++; }
+      try {
+        await drawingLibrary.add([row], 'server');
+        const rating = reviewValue(state.drawingReviews, 'browser', row.id);
+        if (rating !== 'unrated') state.drawingReviews = setReview(state.drawingReviews, 'server', row.id, rating);
+        completed++;
+      }
       catch (error) {
         await reloadDrawings();
         throw new Error(`已迁移 ${completed}/${rows.length} 张；${error.message}。可再次点击迁移继续`);
@@ -1806,7 +2114,11 @@ function importDrawingFiles() {
           if (rows.length + drawings.length > maximum) throw new Error(`最多保存 ${maximum} 张图片，请先导出并清理一些图片`);
         }
       }
-      if (rows.length) await drawingLibrary.add(rows);
+      if (rows.length) {
+        await drawingLibrary.add(rows);
+        for (const row of rows) if (row.rating && row.rating !== 'unrated') state.drawingReviews = setReview(state.drawingReviews, state.cacheLocation, row.id, row.rating);
+        persist();
+      }
       const warnings = rows.filter((item) => item.warning);
       drawingUI.page = 1;
       drawingUI.filters = { source: 'all', start: '', end: '', search: '', favoriteOnly: false };
@@ -1849,6 +2161,30 @@ function closeDrawingViewer() {
   host.querySelector(`[data-action="viewer"][data-image="${viewerUI.imageId}"]`)?.focus({ preventScroll: true });
 }
 
+function markReviewed(rating, undo = false) {
+  const item = viewedDrawing();
+  if (!item || drawingUI.busy) return;
+  const entry = undo ? viewerUI.reviewHistory.at(-1) : { id: item.id, location: state.cacheLocation, before: item.rating || 'unrated' };
+  if (!entry || entry.location !== state.cacheLocation) return;
+  const previous = state.drawingReviews;
+  try {
+    state.drawingReviews = setReview(previous, entry.location, entry.id, undo ? entry.before : rating);
+    persist();
+    for (const row of drawings) row.rating = reviewValue(state.drawingReviews, state.cacheLocation, row.id);
+    if (undo) {
+      viewerUI.reviewHistory.pop();
+      const index = viewerUI.ids.findIndex((id) => groupVersions(drawings, id).some((row) => row.id === entry.id));
+      if (index >= 0) viewerUI.index = index;
+      viewerUI.imageId = entry.id;
+    } else {
+      viewerUI.reviewHistory.push(entry);
+      if (viewerUI.reviewHistory.length > 100) viewerUI.reviewHistory.shift();
+      if (viewerUI.review && viewerUI.index < viewerUI.ids.length - 1) { viewerUI.index++; viewerUI.imageId = ''; }
+    }
+    render(); showDrawingViewer();
+  } catch (error) { state.drawingReviews = previous; toast(error.message); }
+}
+
 function viewedDrawing() {
   const versions = groupVersions(drawings, viewerUI.ids[viewerUI.index]);
   return versions.find((row) => row.id === viewerUI.imageId) || currentDrawing(versions, viewerUI.ids[viewerUI.index]);
@@ -1874,7 +2210,7 @@ function showDrawingViewer() {
 function restoreViewerParameters() {
   const item = viewedDrawing();
   if (!item?.snapshot) return;
-  const previous = { provider: state.provider, novelai: state.novelai, comfyui: state.comfyui, openai: state.openai,
+  const previous = { provider: state.provider, novelai: state.novelai, comfyui: state.comfyui, openai: state.openai, sdwebui: state.sdwebui,
     characterSceneOverride: state.characterSceneOverride, characterSceneOverrideProvider: state.characterSceneOverrideProvider };
   try {
     const message = restoreSnapshot(state, item.snapshot);
@@ -1900,6 +2236,7 @@ function notifyImagesChanged() {
 }
 
 function closeImageEditor() {
+  tagPanel.close();
   imageEditorUI?.controller?.abort();
   imageEditorUI = null;
   document.getElementById('overlay-root').replaceChildren();
@@ -1912,6 +2249,41 @@ function openImageEditor(item) {
       note: '', instruction: '', error: '', busy: false, submitting: false, advanced: false };
     showImageEditor();
   } catch (error) { imageEditorUI = null; toast(error.message); }
+}
+
+async function attachEditorSource(mode) {
+  const ui = imageEditorUI;
+  if (!ui) return;
+  await editorAdvancedPanel.perform(async () => {
+    await editorAdvancedPanel.attach('source', await materializeReferenceDrawing(ui.id));
+    if (imageEditorUI !== ui) return;
+    const draftAdvanced = advancedOf(ui.draft);
+    draftAdvanced.mode = mode;
+    if (ui.draft.provider === 'comfyui') ui.draft.config.advanced = draftAdvanced;
+    else ui.draft.params.advanced = draftAdvanced;
+  });
+}
+
+async function enqueueProcessing(draft, item, storageLocation) {
+  if (state.cacheLocation !== storageLocation) throw new Error('存储位置已变化，请重新打开原图');
+  if (!state.enabled || backupPanel.ui.restoring) throw new Error('请启用插件并完成配置恢复');
+  const service = resolveNovelAIService(credentials.novelai.key, credentials.novelai.endpoint);
+  if (!credentials.novelai.key.trim()) throw new Error('请先在接口配置填写 NovelAI 秘钥');
+  if (service.kind !== 'identify' && service.kind !== 'resolved') throw new Error(service.message);
+  if (service.id !== 'official' && !draft.allowThirdParty) throw new Error('请先勾选尝试当前第三方接口');
+  const dimensions = validateProcessingDraft(draft, item);
+  const parent = drawings.find((row) => row.id === item.id);
+  if (!parent) throw new Error('来源图片已删除，请刷新图库');
+  const materialized = await drawingLibrary.materialize(parent);
+  const prepared = await prepareProcessingSource(materialized.blob, dimensions);
+  if (state.cacheLocation !== storageLocation || !drawings.some((row) => row.id === item.id)) throw new Error('原图或存储位置已变化，请重新打开');
+  const asset = await referenceAssets.put(prepared.blob, { ...prepared, name: parent.title }, storageLocation);
+  const snapshot = processingSnapshot(draft, asset, item);
+  const relation = editRelation(parent, processingTitle(snapshot.novelaiProcessing));
+  relation.number = Math.max(...groupVersions(drawings, parent.id).map((row) => row.version?.number || 1)) + 1;
+  const job = await enqueueGeneration(undefined, undefined, { snapshot, relation, storageLocation, chatBinding: parent.chatBinding });
+  if (!job) throw new Error('未能加入图片处理任务，请检查插件开关和接口配置');
+  toast('已加入图片处理任务，完成后保存为新版本');
 }
 
 async function materializeReferenceDrawing(id) {
@@ -1942,7 +2314,7 @@ async function useViewerReference(kind) {
     closeDrawingViewer();
     const snapshot = captureSnapshot(state), advanced = advancedOf(snapshot);
     advanced.mode = kind === 'source' ? 'image' : 'reference';
-    if (snapshot.provider === 'comfyui' && kind !== 'source') throw new Error('ComfyUI 参考图需使用对应工作流，请选择图生图');
+    if (['comfyui', 'sdwebui'].includes(snapshot.provider) && kind !== 'source') throw new Error('当前模式请使用图生图或局部重绘');
     if (snapshot.provider === 'novelai' && kind !== 'source') advanced.referenceKind = 'vibe';
     if (snapshot.provider === 'comfyui') state.comfyui.advanced = advanced;
     else state[snapshot.provider].advanced = advanced;
@@ -1963,12 +2335,14 @@ function showImageEditor() {
   const dialog = overlay.querySelector('dialog');
   dialog.addEventListener('cancel', (event) => { event.preventDefault(); closeImageEditor(); });
   const params = () => ui.draft.params || ui.draft.config.params;
-  const single = dialog.querySelector('[data-nai="nSamples"], [data-openai="n"], [data-comfy="batch"]');
+  const single = dialog.querySelector('[data-nai="nSamples"], [data-openai="n"], [data-comfy="batch"], [data-sdwebui="batch"]');
   if (single) { single.value = '1'; single.disabled = true; }
   const negative = dialog.querySelector('[data-openai-negative-field]');
-  if (negative) { negative.hidden = false; negative.querySelector('textarea').disabled = ui.busy || ui.submitting; }
+  if (negative && isOpenAINovelAI(params().model)) {
+    negative.hidden = false; negative.querySelector('textarea').disabled = ui.busy || ui.submitting;
+  }
   dialog.addEventListener('input', (event) => {
-    const target = event.target, key = target.dataset.nai || target.dataset.openai || target.dataset.comfy;
+    const target = event.target, key = target.dataset.nai || target.dataset.openai || target.dataset.comfy || target.dataset.sdwebui;
     if (key) params()[key] = target.type === 'checkbox' ? target.checked : target.type === 'number' ? Number(target.value) : target.value;
     if (target.hasAttribute('data-image-edit-instruction')) ui.instruction = target.value;
     if (target.hasAttribute('data-image-edit-note')) ui.note = target.value;
@@ -1995,23 +2369,48 @@ function showImageEditor() {
     else if (action === 'image-edit-cancel') ui.controller?.abort();
     else if (action === 'image-edit-rewrite') void rewriteImage();
     else if (action === 'image-edit-generate') void generateImageVersion();
+    else if (action === 'image-edit-enhance') processingPanel.open(item);
     else if (action === 'image-edit-source' || action === 'image-edit-inpaint') {
-      void editorAdvancedPanel.perform(async () => {
-        await editorAdvancedPanel.attach('source', await materializeReferenceDrawing(ui.id));
-        const draftAdvanced = advancedOf(ui.draft);
-        draftAdvanced.mode = action === 'image-edit-inpaint' ? 'inpaint' : 'image';
-        if (ui.draft.provider === 'comfyui') ui.draft.config.advanced = draftAdvanced;
-        else ui.draft.params.advanced = draftAdvanced;
-      });
+      void attachEditorSource(action === 'image-edit-inpaint' ? 'inpaint' : 'image');
     }
-    else if (['nai-swap-size', 'openai-swap-size'].includes(action)) {
+    else if (['nai-swap-size', 'openai-swap-size', 'sdwebui-swap-size'].includes(action)) {
       [params().width, params().height] = [params().height, params().width]; showImageEditor();
+    } else if (action === 'sdwebui-insert-lora') {
+      try {
+        const token = loraPrompt(dialog.querySelector('[data-sdwebui-lora]').value, Number(dialog.querySelector('[data-sdwebui-lora-weight]').value));
+        if (params().positive.length + token.length + 2 > 12000) throw new Error('正向提示词超过 12000 字符');
+        params().positive = [params().positive.trim(), token].filter(Boolean).join(', '); showImageEditor();
+      } catch (error) { toast(error.message); }
     } else if (['nai-random-seed', 'comfy-random-seed'].includes(action)) {
       params().seed = crypto.getRandomValues(new Uint32Array(1))[0]; showImageEditor();
     }
   });
   editorAdvancedPanel.objectInfo = comfyProbe?.objectInfo;
   editorAdvancedPanel.bind(overlay);
+  if (!ui.busy && !ui.submitting) attachPromptTagButtons(dialog, (target, input, visual = false) => {
+    const roleIndex = input.dataset.imageEditRole;
+    const role = roleIndex !== undefined ? ui.draft.characterScene.characterPrompts[Number(roleIndex)] : null;
+    tagPanel.open({
+      target, visual, label: role ? `${role.name} · 本图角色` : '单图编辑草稿',
+      getContext: () => ({ provider: role ? 'novelai' : ui.draft.provider,
+        params: role ? { ...role, model: params().model } : params(), mapping: ui.draft.config?.mapping,
+        allowedTargets: role ? ['positive', 'negative'] : undefined,
+        limits: role ? { positive: 12000, negative: 4000 } : undefined }),
+      getPreview: (edits) => {
+        const snapshot = structuredClone(ui.draft);
+        if (role) Object.assign(snapshot.characterScene.characterPrompts[Number(roleIndex)], edits);
+        return visualPromptPreview(snapshot, role ? {} : edits);
+      },
+      insert: (next, field) => {
+        if (imageEditorUI !== ui || ui.busy || ui.submitting) throw new Error('当前图片草稿已关闭或正在处理');
+        if (role) for (const key of Array.isArray(field) ? field : [field]) role[key] = next[key];
+        else if (ui.draft.provider === 'comfyui') ui.draft.config.params = next;
+        else ui.draft.params = next;
+        input.value = next[target];
+      },
+      closed: () => { if (imageEditorUI === ui) showImageEditor(); },
+    });
+  });
   paintIcons(); dialog.showModal();
   dialog.querySelector('.image-editor-body').scrollTop = scrollTop;
   } finally { renderingEditor = false; }
@@ -2085,15 +2484,21 @@ async function prepareGenerationPlan(snapshot, credential, connection, imageEdit
   const params = snapshot.params || snapshot.config.params;
   let body, url, base, outputNode;
   const headers = {};
-  const advanced = validateAdvanced(snapshot);
+  const advanced = snapshot.novelaiProcessing ? { mode: 'text' } : validateAdvanced(snapshot);
   if (provider === 'novelai') {
     if (!credential.key.trim()) throw new GenerationError('请先在接口配置填写 NovelAI 秘钥');
     let service = resolveNovelAIService(credential.key, credential.endpoint);
     if (service.kind === 'identify') {
-      service = await identifySkService(credential.key, { signal: AbortSignal.timeout(12000) });
+      service = { kind: 'resolved', ...await identifySkService(credential.key, { signal: AbortSignal.timeout(12000) }) };
     } else if (service.kind !== 'resolved') throw new GenerationError(service.message);
-    url = `${service.endpoint}/ai/generate-image`;
-    body = buildNovelAIRequest(params, snapshot.characterScene?.characterPrompts);
+    if (snapshot.novelaiProcessing) {
+      const processing = buildProcessingRequest(snapshot);
+      url = `${processingEndpoint(service, snapshot.novelaiProcessing)}${processing.path}`;
+      body = processing.body;
+    } else {
+      url = `${service.endpoint}/ai/generate-image`;
+      body = buildNovelAIRequest(params, snapshot.characterScene?.characterPrompts);
+    }
     headers.Authorization = `Bearer ${credential.key.trim()}`;
   } else if (provider === 'openai') {
     url = openAIURLs(connection.endpoint, connection.path).generation;
@@ -2104,6 +2509,13 @@ async function prepareGenerationPlan(snapshot, credential, connection, imageEdit
     if (credential.key.trim()) headers.Authorization = `Bearer ${credential.key.trim()}`;
     body = buildOpenAIRequest(params);
     if ((imageEdit || advanced.mode !== 'text') && !isOpenAINovelAI(params.model) && params.negative.trim()) body.prompt += `\nAvoid: ${params.negative.trim()}`;
+  } else if (provider === 'sdwebui') {
+    base = sdwebuiBase(credential.endpoint);
+    if (location.protocol === 'https:' && new URL(base).protocol === 'http:'
+      && !['127.0.0.1', 'localhost', '[::1]'].includes(new URL(base).hostname)) throw new GenerationError('当前酒馆使用 HTTPS，请为远程 SDWebUI 配置 HTTPS 地址');
+    Object.assign(headers, sdwebuiHeaders(connection, credential.key));
+    const request = buildSDWebUIRequest(snapshot);
+    url = `${base}${request.path}`; body = request.body;
   } else {
     base = normalizeComfyEndpoint(credential.endpoint);
     if (location.protocol === 'https:' && new URL(base).protocol === 'http:') {
@@ -2120,9 +2532,12 @@ async function prepareGenerationPlan(snapshot, credential, connection, imageEdit
     outputNode = snapshot.config.outputNode;
   }
   return {
-    provider, model: params.model || params.checkpoint || snapshot.config.name,
+    provider, model: snapshot.novelaiProcessing?.kind === 'upscale' ? body.model : params.model || params.checkpoint || snapshot.config?.name || 'SDWebUI 当前模型',
     snapshot, headers, body, url, base, outputNode,
-    timeout: provider === 'openai' ? connection.timeout : 600,
+    timeout: ['openai', 'sdwebui'].includes(provider) ? connection.timeout : 600,
+    ...(provider === 'sdwebui' ? { auth: connection.auth, username: connection.username,
+      sdTaskIdSupported: advanced.mode === 'text' ? connection.textTaskId : advanced.mode !== 'upscale' && connection.imageTaskId,
+      sdProgressMode: connection.progressMode } : {}),
     identity: provider === 'openai' ? JSON.stringify([connection.endpoint.trim(), connection.path.trim(), params.model.trim(), credential.key.trim()]) : null,
     identityFields: provider === 'openai' ? [connection.endpoint.trim(), connection.path.trim(), params.model.trim()] : [],
   };
@@ -2140,7 +2555,7 @@ async function runGeneration(job) {
     await submitGeneration(job);
     job.phase = 'retrieving'; job.notify();
     const received = await finishAdvancedImages(job, await downloadResults(job), referenceAssets);
-    const results = job.plan.imageEdit ? received.slice(0, 1) : received;
+    const results = job.plan.imageEdit && !job.plan.snapshot.novelaiProcessing ? received.slice(0, 1) : received;
     job.controller.signal.throwIfAborted();
     job.phase = 'saving'; job.notify();
     await job.checkpoint?.({ stage: 'saving', imageCount: results.length });
@@ -2148,7 +2563,11 @@ async function runGeneration(job) {
       const rows = [];
       for (const [index, result] of results.entries()) {
         const snapshot = structuredClone(job.plan.snapshot);
+        const processing = snapshot.novelaiProcessing;
+        const variant = processingVariant(processing, index, results.length, result.filename);
+        if (processing) processing.variant = variant;
         const params = snapshot.params || snapshot.config.params;
+        if (snapshot.provider === 'sdwebui' && result.model) params.model = result.model;
         if (results.length > 1 && Object.hasOwn(params, 'seed')) params.seed = -1;
         if (Number.isSafeInteger(result.seed) && result.seed >= 0) {
           if (snapshot.provider === 'openai') params.extra = JSON.stringify({ ...JSON.parse(params.extra || '{}'), seed: result.seed });
@@ -2156,9 +2575,12 @@ async function runGeneration(job) {
         }
         const row = await makeDrawing(result.blob, {
           id: `${job.id}-${index}`, createdAt: job.createdAt,
-          title: `${params.positive.trim().slice(0, 40) || '绘图'}${results.length > 1 ? ` · ${index + 1}` : ''}`,
+          title: processing ? `${processingTitle(processing)}${variant ? ` · ${variant}` : ''}`
+            : `${params.positive.trim().slice(0, 40) || '绘图'}${results.length > 1 ? ` · ${index + 1}` : ''}`,
           snapshot, batchId: job.id, chatBinding: job.plan.chatBinding,
-          ...(job.plan.imageEdit ? { version: job.plan.imageEdit } : {}),
+          ...(job.plan.imageEdit ? { version: { ...job.plan.imageEdit,
+            number: job.plan.imageEdit.number + index,
+            note: [job.plan.imageEdit.note, variant].filter(Boolean).join(' · ') } } : {}),
         });
         rows.push(row);
       }
@@ -2177,7 +2599,7 @@ async function runGeneration(job) {
   }
   await reloadDrawings();
   if (job.plan.imageEdit) notifyImagesChanged();
-  toast(`已生成并保存 ${job.imageCount} 张图片`);
+  toast(`已${job.plan.snapshot.novelaiProcessing ? '处理' : '生成'}并保存 ${job.imageCount} 张图片`);
   delete job.rows;
   } finally { stopProgress(); delete job.preparePayload; }
 }
@@ -2192,9 +2614,11 @@ function reportChatTask(job) {
   const data = {
     requestId: request.requestId, binding: request.binding,
     status: ['paused', 'uncertain'].includes(job.status) ? 'failed' : job.status, phase: job.phase,
+    progress: job.progress,
     error: job.status === 'paused' ? '任务已恢复，等待手动继续' : job.error || '',
     recoverable: ['paused', 'failed'].includes(job.status) && (Boolean(job.execution) || job.stage === 'waiting'),
     savedIds: job.savedIds || [],
+    ...(request.quickImage ? { imageId: job.plan.imageEdit.parentId, id: job.id, execution: Boolean(job.execution) } : {}),
   };
   const serialized = JSON.stringify(data);
   if (request.lastReport === serialized) return;
@@ -2225,6 +2649,36 @@ export function receiveChatCommand(data) {
   if (data.type === 'linghuashi:chat-valid') {
     chatValidations.get(data.validationId)?.(data.valid === true);
     return;
+  }
+  if (data.type === 'linghuashi:chat-images-changed') {
+    void libraryReady.then(reloadDrawings).catch((error) => toast(error.message)); return;
+  }
+  if (data.type === 'linghuashi:chat-image-open') {
+    if (!validBinding(data.binding) || !validImageId(data.id)
+      || !['view', 'edit', 'source', 'inpaint', 'enhance', 'restore'].includes(data.action)) return;
+    void openChatImage(data).catch((error) => toast(error.message)); return;
+  }
+  if (data.type === 'linghuashi:chat-image-control') {
+    if (!validBinding(data.binding) || !/^[a-f0-9-]{36}$/.test(data.taskId || '')
+      || !['recover', 'cancel'].includes(data.action)) return;
+    void (async () => {
+      await tasksReady; await refreshTasks();
+      const job = taskQueue.jobs.find((row) => row.id === data.taskId);
+      if (!job?.plan.imageEdit || job.plan.chatBinding?.id !== data.binding.id) throw new Error('配图任务已变化，请刷新聊天');
+      if (data.action === 'cancel') taskQueue.cancel(job.id);
+      else taskQueue.retry(job.id);
+    })().catch((error) => toast(error.message));
+    return;
+  }
+  if (data.type === 'linghuashi:chat-image-generate') {
+    if (!validBinding(data.binding) || !validImageId(data.imageId)
+      || !/^[a-f0-9-]{36}$/.test(data.requestId || '') || chatRequests.has(data.requestId)
+      || !['browser', 'server'].includes(data.storageLocation)) return;
+    if (chatInbox.length >= 32) {
+      chatPost('linghuashi:chat-task', { requestId: data.requestId, imageId: data.imageId, status: 'failed', error: '生图队列已满，请稍后重试' }); return;
+    }
+    const request = { ...data, quickImage: true, automatic: false, controller: new AbortController() };
+    chatRequests.set(request.requestId, request); chatInbox.push(request); void processChatInbox(); return;
   }
   if (['linghuashi:chat-view', 'linghuashi:chat-edit'].includes(data.type) && typeof data.id === 'string') {
     void libraryReady.then(async () => {
@@ -2323,9 +2777,49 @@ async function processChatInbox() {
       }
       if (request.controller.signal.aborted) continue;
       if (request.type === 'linghuashi:chat-assist') await analyzeChat(request);
+      else if (request.quickImage) await enqueueChatImage(request);
       else await enqueueGeneration(request);
     }
   } finally { processingChat = false; }
+}
+
+async function openChatImage(data) {
+  await libraryReady;
+  if (state.cacheLocation !== data.storageLocation) {
+    throw new Error(`这张配图保存在${data.storageLocation === 'server' ? '酒馆服务器' : '浏览器'}，请先在插件设置切换图片缓存位置`);
+  }
+  if (document.getElementById('overlay-root').childElementCount || processingPanel.dialog) throw new Error('请先完成或关闭当前编辑窗口');
+  await reloadDrawings();
+  const item = drawings.find((row) => row.id === data.id);
+  if (!chatImageBelongsTo(item, data.binding)) throw new Error('图片已删除或配图关联已变化，请刷新聊天');
+  if (data.action === 'restore') {
+    const previous = { provider: state.provider, novelai: state.novelai, comfyui: state.comfyui, openai: state.openai, sdwebui: state.sdwebui,
+      characterSceneOverride: state.characterSceneOverride, characterSceneOverrideProvider: state.characterSceneOverrideProvider };
+    try {
+      const message = restoreSnapshot(state, item.snapshot);
+      persist(); resetConnection(); activeDrawingId = item.id; showPage('generate'); toast(message);
+    } catch (error) { Object.assign(state, previous); throw error; }
+  } else if (data.action === 'view') openViewer(item.id);
+  else if (data.action === 'enhance') processingPanel.open(item);
+  else {
+    openImageEditor(item);
+    if (data.action === 'source' || data.action === 'inpaint') await attachEditorSource(data.action === 'source' ? 'image' : 'inpaint');
+  }
+}
+
+async function enqueueChatImage(request) {
+  try {
+    const rows = await drawingLibrary.list(request.storageLocation);
+    const parent = rows.find((row) => row.id === request.imageId);
+    if (!chatImageBelongsTo(parent, request.binding) || !await validateChatRequest(request)) throw new Error('原消息或图片已变化，请重新打开配图');
+    const draft = applyChatImageEdit(imageEditDraft(parent.snapshot), request.edits, request.randomize === true);
+    const snapshot = prepareImageEdit(draft), relation = editRelation(parent, request.edits ? '聊天修改提示词' : '聊天再画一张');
+    relation.number = Math.max(...groupVersions(rows, parent.id).map((row) => row.version?.number || 1)) + 1;
+    await enqueueGeneration(request, undefined, { snapshot, relation, chatBinding: parent.chatBinding, storageLocation: request.storageLocation });
+  } catch (error) {
+    chatPost('linghuashi:chat-task', { requestId: request.requestId, imageId: request.imageId, binding: request.binding,
+      status: request.controller.signal.aborted ? 'cancelled' : 'failed', error: error.message });
+  }
 }
 
 function confirmGeneration(snapshot, request) {
@@ -2334,7 +2828,7 @@ function confirmGeneration(snapshot, request) {
   return new Promise((resolve) => {
     overlay.innerHTML = `<dialog class="nai-preset-dialog generation-confirm" aria-label="确认生图提示词"><form>
       <header><h2>确认生图提示词</h2>${iconButton('x', '关闭', 'generation-close')}</header>
-      <p>${request ? `聊天配图 ${request.binding.slot + 1} · ` : ''}${esc(params.model || params.checkpoint || snapshot.config.name)} · ${params.n || params.nSamples || params.batchSize || 1} 张</p>
+      <p>${request?.binding ? `聊天配图 ${request.binding.slot + 1} · ` : request?.external ? `来自 ${esc(request.external)} · ` : ''}${esc(params.model || params.checkpoint || snapshot.config.name)} · ${params.n || params.nSamples || params.batchSize || 1} 张</p>
       ${field('正向提示词', `<textarea name="positive" rows="5" maxlength="32000" ${snapshot.provider === 'comfyui' && !snapshot.config.mapping.positive ? 'readonly' : ''}>${esc(params.positive)}</textarea>`)}
       <footer>${button('x', '取消', 'generation-close', 'secondary')}<button type="submit" class="ui-button primary">${icon('sparkles')}<span>确认生成</span></button></footer>
     </form></dialog>`;
@@ -2357,19 +2851,81 @@ function confirmGeneration(snapshot, request) {
     });
     paintIcons(); dialog.showModal();
     if (request) {
-      chatPost('linghuashi:chat-task', { requestId: request.requestId, status: 'confirming' });
+      if (!request.external) chatPost('linghuashi:chat-task', { requestId: request.requestId, status: 'confirming' });
       chatPost('linghuashi:attention', {});
     }
+    if (request?.controller.signal.aborted) dialog.close();
   });
+}
+
+async function prepareExternalGeneration(options, metadata, signal, id) {
+  if (backupPanel.ui.busy || backupPanel.ui.restoring) throw apiError('BUSY', '备份或恢复正在进行，请稍后重试');
+  if (drawingUI.loading || !drawingLibrary.db) throw apiError('STORAGE_UNAVAILABLE', '图片存储尚未准备好');
+  const { snapshot, connection, useCurrentConnection } = prepareExtensionSnapshot(state, options);
+  const provider = snapshot.provider, params = snapshot.params || snapshot.config.params;
+  const storageLocation = options.storageLocation || state.cacheLocation;
+  if (storageLocation === 'server') await drawingLibrary.list('server');
+  const credential = useCurrentConnection ? { ...credentials[provider] }
+    : { endpoint: connection.endpoint, auth: connection.auth || 'none',
+      key: connection.keyRef ? await credentialRequest('read', provider, { ref: connection.keyRef }) : '' };
+  if (useCurrentConnection && provider === 'openai') Object.assign(connection, {
+    endpoint: state.openaiEndpoint, path: state.openaiPath, timeout: state.openaiTimeout,
+  });
+  if (params.seed === -1) params.seed = crypto.getRandomValues(new Uint32Array(1))[0];
+  const scene = snapshot.characterScene;
+  if (scene?.chatKey && scene.chatKey !== currentChat().key) throw apiError('CHAT_TARGET_INVALID', '角色档案属于另一聊天');
+  let prepared = applyCharacterScene(snapshot, scene);
+  if (state.confirm) {
+    if (document.getElementById('overlay-root').childElementCount) throw apiError('BUSY', '请先处理当前编辑窗口');
+    const controller = { signal };
+    if (!await confirmGeneration(prepared, { external: metadata.source.name, controller })) throw apiError('CANCELLED', '已取消生图');
+  }
+  signal.throwIfAborted();
+  const plan = await prepareGenerationPlan(prepared, credential, connection, { external: true });
+  plan.keyRef = plan.headers.Authorization ? await credentialRequest('write', provider, { key: credential.key, ref: connection.keyRef }) : '';
+  plan.storageLocation = storageLocation;
+  if (options.chat) {
+    if (storageLocation !== state.cacheLocation) throw apiError('CHAT_TARGET_INVALID', '聊天配图须使用当前图片存储位置');
+    signal.throwIfAborted();
+    const target = await extensionChatRequest({ chat: options.chat, taskId: id, storageLocation });
+    plan.chatRequestId = id; plan.chatBinding = target.binding;
+    const controller = new AbortController(), abort = () => controller.abort(signal.reason);
+    signal.addEventListener('abort', abort, { once: true });
+    if (signal.aborted) abort();
+    const request = { requestId: id, binding: target.binding, automatic: false, controller, external: true };
+    chatRequests.set(id, request);
+    const valid = await validateChatRequest(request);
+    signal.removeEventListener('abort', abort);
+    if (signal.aborted || !valid) {
+      chatPost('linghuashi:chat-task', { requestId: id, binding: target.binding, status: 'cancelled' });
+      chatRequests.delete(id);
+      throw apiError(signal.aborted ? 'CANCELLED' : 'CHAT_TARGET_INVALID', '原消息或回复分支已变化');
+    }
+  }
+  return plan;
+}
+
+export function receiveExtensionCommand(data) {
+  if (!isInstalled() || typeof data.requestId !== 'string' || !/^[a-f0-9-]{36}$/.test(data.requestId)) return;
+  if (data.type === 'linghuashi:extension-abort') { externalTaskService.abort(data.requestId); return; }
+  void externalTaskService.dispatch(data).then(
+    (value) => chatPost('linghuashi:extension-response', { requestId: data.requestId, value }),
+    (error) => chatPost('linghuashi:extension-response', { requestId: data.requestId,
+      error: { code: error.code || (error.name === 'AbortError' ? 'CANCELLED' : 'REQUEST_FAILED'),
+        message: String(error.message || '扩展调用失败').replace(/\b(?:pst-|sk-|STD-)[A-Za-z0-9_-]+/g, '[已隐藏]').slice(0, 500),
+        ...(error.taskId ? { taskId: error.taskId } : {}) } }),
+  );
 }
 
 async function enqueueGeneration(request, assistantResult, imageEdit) {
   if (backupPanel.ui.restoring) throw new GenerationError('配置正在恢复，请完成后再生图');
   const report = (status, error = '') => {
-    if (request) chatPost('linghuashi:chat-task', { requestId: request.requestId, status, error });
+    if (request) chatPost('linghuashi:chat-task', { requestId: request.requestId, status, error,
+      ...(request.quickImage ? { imageId: request.imageId, binding: request.binding } : {}) });
     else if (error && imageEdit) throw new Error(error);
     else if (error) toast(error);
   };
+  if (workbenchPanel.ui.busy) { report('failed', '正在保存组合任务，请稍后提交'); return; }
   if (!state.enabled) { report('cancelled'); return; }
   if (drawingUI.loading || !drawingLibrary.db) { report('failed', '图片存储尚未准备好，请稍后重试'); return; }
   const storageLocation = imageEdit?.storageLocation || request?.storageLocation || state.cacheLocation;
@@ -2379,6 +2935,7 @@ async function enqueueGeneration(request, assistantResult, imageEdit) {
   }
   let snapshot = imageEdit ? structuredClone(imageEdit.snapshot)
     : request?.assistantSnapshot ? structuredClone(request.assistantSnapshot) : captureSnapshot(state);
+  delete snapshot.extensionRequest;
   const assistantPlan = request?.assistantPlan || assistantResult?.plan;
   if (assistantPlan) {
     try {
@@ -2389,6 +2946,8 @@ async function enqueueGeneration(request, assistantResult, imageEdit) {
   const params = snapshot.params || snapshot.config.params;
   if (request) {
     if (!await validateChatRequest(request)) { report('cancelled'); return; }
+  }
+  if (request && !imageEdit) {
     if (snapshot.provider === 'comfyui' && !snapshot.config.mapping.positive) {
       report('failed', '请先为 ComfyUI 工作流映射正向提示词节点'); return;
     }
@@ -2404,7 +2963,8 @@ async function enqueueGeneration(request, assistantResult, imageEdit) {
   }
   if (params.seed === -1) params.seed = crypto.getRandomValues(new Uint32Array(1))[0];
   const credential = { ...credentials[snapshot.provider] };
-  const connection = { endpoint: state.openaiEndpoint, path: state.openaiPath, timeout: state.openaiTimeout };
+  const connection = snapshot.provider === 'sdwebui' ? structuredClone(state.connections.sdwebui)
+    : { endpoint: state.openaiEndpoint, path: state.openaiPath, timeout: state.openaiTimeout };
   try {
     await tasksReady;
     const scene = snapshot.characterScene;
@@ -2412,7 +2972,11 @@ async function enqueueGeneration(request, assistantResult, imageEdit) {
       throw new Error('角色档案快照属于另一聊天，请重新准备提示词');
     }
     if (!imageEdit) snapshot = applyCharacterScene(snapshot, scene, assistantPlan?.characters);
-    if (!imageEdit && state.confirm && !await confirmGeneration(snapshot, request)) { report('cancelled'); return; }
+    if ((!imageEdit || request?.quickImage && !request.edits) && state.confirm) {
+      const confirmation = request?.quickImage ? imageEditDraft(snapshot) : snapshot;
+      if (!await confirmGeneration(confirmation, request)) { report('cancelled'); return; }
+      if (request?.quickImage) snapshot = prepareImageEdit(confirmation);
+    }
     await saveConnection(snapshot.provider);
     const plan = await prepareGenerationPlan(snapshot, credential, connection, imageEdit);
     plan.keyRef = plan.headers.Authorization ? await credentialRequest('write', snapshot.provider, {
@@ -2438,9 +3002,61 @@ async function enqueueGeneration(request, assistantResult, imageEdit) {
   }
 }
 
+async function enqueueBatch(preview) {
+  const ids = [], plans = [];
+  if (!state.enabled || backupPanel.ui.restoring) throw new Error('请先启用插件并完成配置恢复');
+  if (!preview?.rows?.length || preview.rows.length > BATCH_LIMIT) throw new Error('请先预览组合');
+  await libraryReady; await tasksReady;
+  if (!drawingLibrary.db || drawingUI.loading) throw new Error('图片存储尚未准备好');
+  if (taskQueue.jobs.filter((job) => ['queued', 'running'].includes(job.status)).length + preview.rows.length > BATCH_LIMIT) {
+    throw new Error('加上现有等待和运行任务后超过 32 个，请先等待完成');
+  }
+  const provider = preview.rows[0].snapshot.provider, storageLocation = state.cacheLocation;
+  if (provider !== state.provider) throw new Error('生图模式已变化，请重新预览');
+  const credential = { ...credentials[provider] };
+  const connection = provider === 'sdwebui' ? structuredClone(state.connections.sdwebui)
+    : { endpoint: state.openaiEndpoint, path: state.openaiPath, timeout: state.openaiTimeout };
+  const groupId = crypto.randomUUID(), createdAt = Date.now();
+  if (advancedOf(preview.rows[0].snapshot).mode === 'inpaint' && advancedPanel.ui.dirty) throw new Error('蒙版有未保存修改，请回生图工坊保存后重新预览');
+  await advancedPanel.beforeGenerate();
+  if (storageLocation === 'server') await drawingLibrary.list('server');
+  await saveConnection(provider);
+  const keyRef = credential.key.trim() ? await credentialRequest('write', provider, { key: credential.key, ref: state.connections[provider].keyRef }) : '';
+  if (provider === 'novelai' && resolveNovelAIService(credential.key, credential.endpoint).kind === 'identify') {
+    const service = await identifySkService(credential.key, { signal: AbortSignal.timeout(12000) });
+    credential.endpoint = service.endpoint;
+  }
+  for (const row of preview.rows) {
+    let snapshot = structuredClone(row.snapshot);
+    snapshot = applyCharacterScene(snapshot, snapshot.characterScene);
+    snapshot.experiment = { id: groupId, mode: preview.mode, index: row.index, label: row.label, createdAt };
+    const plan = await prepareGenerationPlan(snapshot, credential, connection);
+    plan.keyRef = keyRef; plan.storageLocation = storageLocation; plans.push(plan);
+  }
+  const created = [];
+  try {
+    for (const plan of plans) {
+      const record = await taskPersistence.create(plan);
+      created.push({ plan, id: record.id }); ids.push(record.id);
+    }
+  } catch (error) {
+    for (const row of created) { const job = taskQueue.add(row.plan, { id: row.id, defer: true }); job.status = 'paused'; }
+    return { ids, error: `任务保存中断：${error.message}。已保存 ${ids.length} 个，暂未提交，可在任务记录中核对后继续。` };
+  }
+  if (!state.enabled || state.cacheLocation !== storageLocation) {
+    for (const row of created) { const job = taskQueue.add(row.plan, { id: row.id, defer: true }); job.status = 'paused'; }
+    return { ids, error: '配置发生变化，任务已保存为等待继续，请在任务记录中核对' };
+  }
+  for (const row of created) taskQueue.add(row.plan, { id: row.id, defer: true });
+  activeJobId = ids[0]; taskQueue.pump(); render();
+  return { ids };
+}
+
 async function refreshTasks() {
-  if (taskRefreshing) return;
+  if (taskRefreshing) return taskRefreshWork;
+  if (workbenchPanel.ui.busy) return;
   taskRefreshing = true;
+  taskRefreshWork = (async () => {
   try {
     const result = await taskPersistence.list();
     for (const row of result.rows) {
@@ -2448,6 +3064,7 @@ async function refreshTasks() {
         chatRequests.set(row.plan.chatRequestId, {
           requestId: row.plan.chatRequestId, binding: row.plan.chatBinding,
           jobId: row.id, automatic: false, restored: true, controller: new AbortController(),
+          quickImage: Boolean(row.plan.imageEdit), imageId: row.plan.imageEdit?.parentId,
         });
       }
     }
@@ -2455,6 +3072,8 @@ async function refreshTasks() {
     taskQueue.restore(result.rows);
   } catch (error) { taskError = `任务记录暂时无法读取：${error.message}`; }
   finally { taskRefreshing = false; if (host) render(); }
+  })();
+  return taskRefreshWork;
 }
 
 function generate() {
@@ -2470,6 +3089,7 @@ function openViewer(imageId) {
   if (!viewerUI.ids.includes(versionGroupId(item))) viewerUI.ids.push(versionGroupId(item));
   viewerUI.index = viewerUI.ids.indexOf(versionGroupId(item));
   viewerUI.imageId = item.id; viewerUI.compare = false;
+  viewerUI.review = false;
   viewerUI.details = window.innerWidth > 720;
   viewerUI.zoom = false;
   showDrawingViewer();
@@ -2503,6 +3123,13 @@ export function mountPlugin(root, next) {
   tasksReady = refreshTasks();
   const taskSync = setInterval(() => { void refreshTasks(); }, 8000);
   window.addEventListener('pagehide', () => clearInterval(taskSync), { once: true });
+  if (typeof BroadcastChannel !== 'undefined') {
+    const imageSync = new BroadcastChannel(`linghuashi-chat:${currentAccount()}`);
+    imageSync.onmessage = (event) => {
+      if (event.data?.type === 'images-changed') void libraryReady.then(reloadDrawings).catch((error) => toast(error.message));
+    };
+    window.addEventListener('pagehide', () => imageSync.close(), { once: true });
+  }
   host.addEventListener('click', async (event) => {
     const target = event.target.closest('button');
     if (!target) return;
@@ -2557,7 +3184,7 @@ export function mountPlugin(root, next) {
         if (!discardArtistChanges()) break;
         if (target.dataset.action === 'artist-copy') artistDraft({ ...artistUI.draft, id: crypto.randomUUID(), name: `${artistUI.draft?.name || '画风'} 副本`.slice(0, 40) });
         else if (target.dataset.action === 'artist-capture') {
-          const params = state.provider === 'novelai' ? state.novelai : state.provider === 'openai' ? state.openai : state.comfyui.params;
+          const params = state.provider === 'comfyui' ? state.comfyui.params : state[state.provider];
           artistDraft({ ...emptyArtist(), target: state.provider, artist: state.provider === 'comfyui' ? params.positive : params.artist, negative: params.negative });
         } else artistDraft(emptyArtist());
         render(); break;
@@ -2614,6 +3241,25 @@ export function mountPlugin(root, next) {
         } else await enqueueGeneration(undefined, { plan, options: normalizeAssistant(state.assistant) });
         break;
       }
+      case 'sdwebui-fetch-models': void checkConnection(true); break;
+      case 'sdwebui-load-preset':
+        try { await loadCurrentPreset('sdwebui', state.sdwebuiPresetId); } catch (error) { toast(error.message); render(); } break;
+      case 'sdwebui-save-as': openSDWebUIPresetDialog(); break;
+      case 'sdwebui-save-preset':
+        commitSDWebUIFields();
+        if (state.sdwebuiPresetId === 'default') openSDWebUIPresetDialog();
+        else try { await saveCurrentPreset('sdwebui'); toast('预设已更新'); } catch (error) { toast(error.message); }
+        break;
+      case 'sdwebui-delete-preset': openSDWebUIPresetDialog(true); break;
+      case 'sdwebui-swap-size':
+        [state.sdwebui.width, state.sdwebui.height] = [state.sdwebui.height, state.sdwebui.width]; commitSDWebUIFields(); break;
+      case 'sdwebui-insert-lora':
+        try {
+          const token = loraPrompt(host.querySelector('[data-sdwebui-lora]').value, Number(host.querySelector('[data-sdwebui-lora-weight]').value));
+          if (state.sdwebui.positive.length + token.length + 2 > 12000) throw new Error('正向提示词超过 12000 字符');
+          state.sdwebui.positive = [state.sdwebui.positive.trim(), token].filter(Boolean).join(', '); commitSDWebUIFields();
+        } catch (error) { toast(error.message); }
+        break;
       case 'openai-fetch-models': checkConnection(true); break;
       case 'openai-toggle-models':
         openaiModelUI.open = !openaiModelUI.open; updateOpenAIModelList(); break;
@@ -2671,6 +3317,14 @@ export function mountPlugin(root, next) {
         drawingUI.multiselect = !drawingUI.multiselect;
         if (!drawingUI.multiselect) drawingUI.selection.clear();
         render(); break;
+      case 'drawing-review': {
+        const groups = new Set(drawingTargets().map(versionGroupId));
+        viewerUI.ids = drawingGroups(drawings).filter((row) => groups.has(versionGroupId(row))).map(versionGroupId);
+        viewerUI.index = 0; viewerUI.imageId = '';
+        viewerUI.review = true; viewerUI.details = false; viewerUI.zoom = false;
+        if (viewerUI.ids.length) showDrawingViewer();
+        break;
+      }
       case 'drawing-clear-selection': drawingUI.selection.clear(); render(); break;
       case 'drawing-export': case 'drawing-download-all': {
         const items = drawingTargets();
@@ -2678,8 +3332,8 @@ export function mountPlugin(root, next) {
         drawingOperation(async () => {
           const loaded = [];
           if (items.reduce((sum, row) => sum + row.blob.size, 0) > 200 * 1024 * 1024) throw new Error('导出包超过 200 MB，请分批导出');
-          for (const item of items) loaded.push(await drawingLibrary.materialize(item));
-          saveBlob(await exportDrawings(loaded, withParameters), withParameters ? 'linghuashi-drawings.zip' : 'linghuashi-images.zip');
+          for (const item of items) loaded.push({ ...await drawingLibrary.materialize(item), rating: item.rating });
+          saveBlob(await exportDrawings(loaded, withParameters, drawingUI.exportOptions), withParameters ? 'linghuashi-drawings.zip' : 'linghuashi-images.zip');
           toast(withParameters ? `已导出 ${items.length} 张原图及参数` : `已打包 ${items.length} 张原图`);
         }); break;
       }
@@ -2777,6 +3431,9 @@ export function mountPlugin(root, next) {
           state.characterProfiles = saveProfile(state.characterProfiles, profileUI.draft, profileUI.scope === 'chat' ? currentChat().key : '');
           useLiveCharacterScene(); loadProfileDraft(); persist(); render(); toast('角色档案已保存');
         } catch (error) { profileUI.error = error.message; render(); } break;
+      case 'profile-ai-open':
+        if (!discardProfileChanges()) break;
+        loadProfileDraft(); await profileAI.open(); break;
       case 'save-preset': persist(); toast('已保存'); break;
       case 'edit-prompt': editPrompt = !editPrompt; render(); break;
       case 'floating-menu': floatingMenu?.toggle(); break;
@@ -2930,6 +3587,19 @@ export function mountPlugin(root, next) {
       openaiModelUI.query = event.target.value;
       updateOpenAIModelList(); return;
     }
+    const sdKey = event.target.dataset.sdwebui;
+    if (sdKey && Object.hasOwn(SDWEBUI_DEFAULTS, sdKey) && !event.target.disabled) {
+      state.sdwebui[sdKey] = event.target.type === 'checkbox' ? event.target.checked
+        : typeof SDWEBUI_DEFAULTS[sdKey] === 'number' ? Number(event.target.value) : event.target.value;
+      persist(); updateSDWebUIDirty(); return;
+    }
+    const sdConnectionKey = event.target.dataset.sdwebuiConnection;
+    if (['auth', 'username', 'timeout'].includes(sdConnectionKey)) {
+      state.connections.sdwebui[sdConnectionKey] = event.target.value;
+      if (sdConnectionKey === 'auth') credentials.sdwebui.auth = event.target.value;
+      if (sdConnectionKey !== 'timeout') Object.assign(state.connections.sdwebui, { textTaskId: false, imageTaskId: false, progressMode: 'none' });
+      persist(); resetConnection(); updateConnectionStatus(); return;
+    }
     const openaiKey = event.target.dataset.openai;
     if (openaiKey && Object.hasOwn(OPENAI_DEFAULTS, openaiKey) && !event.target.disabled) {
       state.openai[openaiKey] = event.target.type === 'number' && event.target.value !== '' ? Number(event.target.value) : event.target.value;
@@ -2961,6 +3631,7 @@ export function mountPlugin(root, next) {
     const transient = event.target.dataset.transient;
     if (['key', 'endpoint'].includes(transient)) {
       credentials[state.provider][transient] = event.target.value;
+      if (state.provider === 'sdwebui') Object.assign(state.connections.sdwebui, { textTaskId: false, imageTaskId: false, progressMode: 'none' });
       if (transient === 'key') {
         if (state.provider === 'openai') {
           apiEditRevision++;
@@ -3016,6 +3687,7 @@ export function mountPlugin(root, next) {
     }
   });
   host.addEventListener('toggle', (event) => {
+    if (event.target.matches('.sdwebui-advanced') && host.contains(event.target)) sdwebuiAdvancedOpen = event.target.open;
     if (event.target.matches('.openai-advanced') && host.contains(event.target)) openaiAdvancedOpen = event.target.open;
     if (event.target.matches('.openai-transport') && host.contains(event.target)) openaiTransportOpen = event.target.open;
     if (event.target.matches('.endpoint-options') && host.contains(event.target)) addressExpanded = event.target.open;
@@ -3025,6 +3697,10 @@ export function mountPlugin(root, next) {
     }
   }, true);
   host.addEventListener('change', async (event) => {
+    if (event.target.dataset.drawingExport) {
+      drawingUI.exportOptions[event.target.dataset.drawingExport] = event.target.value;
+      return;
+    }
     if (event.target.matches('[data-profile-reference-file]')) {
       const draft = profileUI.draft;
       if (!draft) return;
@@ -3100,6 +3776,19 @@ export function mountPlugin(root, next) {
     }
     if (event.target.matches('[data-transient="key"]')) {
       scheduleConnectionSave(state.provider, true); return;
+    }
+    if (event.target.dataset.sdwebui) {
+      commitSDWebUIFields(); return;
+    }
+    if (event.target.dataset.sdwebuiConnection) {
+      persist(); keyVisible = false;
+      if (event.target.dataset.sdwebuiConnection === 'auth') render();
+      else if (event.target.dataset.sdwebuiConnection === 'timeout') event.target.value = state.connections.sdwebui.timeout;
+      return;
+    }
+    if (event.target.matches('[data-sdwebui-preset]')) {
+      try { await loadCurrentPreset('sdwebui', event.target.value); } catch (error) { toast(error.message); render(); }
+      return;
     }
     if (event.target.dataset.openai) {
       const key = event.target.dataset.openai;
@@ -3221,7 +3910,7 @@ export function mountPlugin(root, next) {
       const start = String(values.get('start') || '');
       const end = String(values.get('end') || '');
       if (start && end && start > end) { drawingUI.error = '开始日期不能晚于结束日期'; render(); return; }
-      drawingUI.filters = { source: String(values.get('source')), start, end, search: String(values.get('search') || ''), favoriteOnly: values.has('favoriteOnly'), chatKey: String(values.get('chatKey') || '') };
+      drawingUI.filters = { source: String(values.get('source')), start, end, search: String(values.get('search') || ''), favoriteOnly: values.has('favoriteOnly'), chatKey: String(values.get('chatKey') || ''), rating: String(values.get('rating') || '') };
       drawingUI.page = 1; drawingUI.error = ''; drawingUI.selection.clear(); render();
       return;
     }
@@ -3239,6 +3928,8 @@ export function mountPlugin(root, next) {
   document.getElementById('overlay-root').addEventListener('click', (event) => {
     const action = event.target.closest('button[data-action]')?.dataset.action;
     if (action === 'close-viewer') closeDrawingViewer();
+    if (action === 'viewer-review') markReviewed(event.target.closest('[data-rating]').dataset.rating);
+    if (action === 'viewer-review-undo') markReviewed('unrated', true);
     if (action === 'download') downloadImage(event.target.closest('[data-image]')?.dataset.image);
     if (action === 'viewer-prev' || action === 'viewer-next') {
       viewerUI.index = (viewerUI.index + (action === 'viewer-prev' ? -1 : 1) + viewerUI.ids.length) % viewerUI.ids.length;
@@ -3249,6 +3940,7 @@ export function mountPlugin(root, next) {
     if (action === 'viewer-zoom') { viewerUI.zoom = !viewerUI.zoom; showDrawingViewer(); }
     if (action === 'viewer-restore') restoreViewerParameters();
     if (action === 'viewer-edit') openImageEditor(viewedDrawing());
+    if (action === 'viewer-enhance') processingPanel.open(viewedDrawing());
     if (action === 'viewer-source') void useViewerReference('source');
     if (action === 'viewer-reference') void useViewerReference('reference');
     if (action === 'version-view' || action === 'version-prev' || action === 'version-next') {
@@ -3289,7 +3981,13 @@ export function mountPlugin(root, next) {
     if (event.target.hasAttribute('data-viewer-compare')) { viewerUI.compareId = event.target.value; showDrawingViewer(); }
   });
   document.addEventListener('keydown', (event) => {
+    if (document.querySelector('.novelai-processing-dialog[open], .tag-picker[open], .profile-ai-dialog[open]')) return;
     if (event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+    if (document.querySelector('.drawing-viewer') && viewerUI.review && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      const rating = ({ '0': 'unrated', '1': 'best', '2': 'usable', '3': 'reject' })[event.key];
+      if (rating) { event.preventDefault(); markReviewed(rating); return; }
+      if (event.key.toLowerCase() === 'z') { event.preventDefault(); markReviewed('unrated', true); return; }
+    }
     if (document.querySelector('.drawing-viewer') && ['ArrowLeft', 'ArrowRight'].includes(event.key)) {
       event.preventDefault();
       viewerUI.index = (viewerUI.index + (event.key === 'ArrowLeft' ? -1 : 1) + viewerUI.ids.length) % viewerUI.ids.length;

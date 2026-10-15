@@ -2,6 +2,7 @@ import { icon, paintIcons } from '../icons.js';
 import { pluginIcon } from './branding.js';
 import { getCharacterTheme } from './appearance.js';
 import { floatingMenuPosition } from './floating-menu-position.js';
+import { FLOATING_QUOTES } from './floating-quotes.js';
 import menuCSS from './floating-menu.css?inline';
 
 export function createFloatingMenu({ button, container, onSettings, onHide }) {
@@ -26,6 +27,8 @@ export function createFloatingMenu({ button, container, onSettings, onHide }) {
   button.setAttribute('aria-controls', menu.id);
   button.setAttribute('aria-expanded', 'false');
   const items = [...menu.querySelectorAll('[role="menuitem"]')];
+  const subtitle = menu.querySelector('.floating-menu-title small');
+  let quoteIndex = -1;
 
   function reposition() {
     if (menu.hidden) return;
@@ -45,6 +48,12 @@ export function createFloatingMenu({ button, container, onSettings, onHide }) {
 
   function open(last = false) {
     if (button.hidden) return;
+    if (menu.hidden) {
+      quoteIndex = quoteIndex < 0
+        ? Math.floor(Math.random() * FLOATING_QUOTES.length)
+        : (quoteIndex + 1 + Math.floor(Math.random() * (FLOATING_QUOTES.length - 1))) % FLOATING_QUOTES.length;
+      subtitle.textContent = FLOATING_QUOTES[quoteIndex];
+    }
     menu.hidden = false;
     button.setAttribute('aria-expanded', 'true');
     reposition();
@@ -61,7 +70,6 @@ export function createFloatingMenu({ button, container, onSettings, onHide }) {
     if (menu.dataset.characterTheme !== selected.id) {
       menu.dataset.characterTheme = selected.id;
       menu.querySelector('.floating-menu-avatar').innerHTML = pluginIcon(selected.id);
-      menu.querySelector('.floating-menu-title small').textContent = selected.title;
     }
     menu.dataset.theme = theme === 'dark' ? 'dark' : 'light';
     if (button.hidden) close();

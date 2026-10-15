@@ -13,6 +13,29 @@ export function characterDirectory(context) {
         name: text(item.data?.name || item.name || item.avatar, 120), current: current.includes(item.avatar) })) };
 }
 
+export async function profileCardSources(context, avatars) {
+  if (!Array.isArray(avatars) || !avatars.length || avatars.length > 6
+    || avatars.some((avatar) => typeof avatar !== 'string' || !avatar || avatar.length > 512)
+    || new Set(avatars).size !== avatars.length) throw new Error('每次请选择 1 至 6 张不同角色卡');
+  let total = 0;
+  const sources = await Promise.all(avatars.map(async (avatar, index) => {
+    const matches = (context.characters || []).filter((card) => card.avatar === avatar);
+    if (matches.length !== 1) throw new Error('角色卡已删除或标识重复，请重新读取角色');
+    const card = matches[0], data = card.data || card;
+    const source = { id: `card-${index}`, avatar, name: text(data.name || card.name || avatar, 120) };
+    for (const [key, limit] of [['description', 16000], ['personality', 4000], ['scenario', 4000]]) {
+      const raw = data[key] || card[key] || '';
+      if (typeof raw !== 'string' || raw.length > limit) throw new Error('角色卡设定过长，请复制需要的外观资料，改用粘贴设定');
+      source[key] = raw;
+      total += raw.length;
+    }
+    if (!source.description.trim() && !source.personality.trim() && !source.scenario.trim()) throw new Error(`${source.name} 的角色卡没有可读取的设定`);
+    return { ...source, revision: await digest(JSON.stringify(source)) };
+  }));
+  if (total > 60000) throw new Error('角色资料总量过长，请减少一次选择的角色数量');
+  return { chatKey: chatIdentity(context), sources };
+}
+
 export async function findBoundMessage(context, binding) {
   if (!binding || chatIdentity(context) !== binding.chatKey) return null;
   for (const message of context.chat || []) {
@@ -95,6 +118,8 @@ export function createAssistantHost({ getContext, settings, post, isBusy = () =>
         value = await collectAssistantContext(getContext(), options, data.binding, data.previous, controller.signal);
       } else if (data.action === 'characters') {
         value = characterDirectory(getContext());
+      } else if (data.action === 'profile-sources') {
+        value = await profileCardSources(getContext(), data.avatars);
       } else if (data.action === 'models') {
         value = await textAccess.models({ refresh: data.refresh === true, signal: controller.signal });
       } else if (data.action === 'text') {

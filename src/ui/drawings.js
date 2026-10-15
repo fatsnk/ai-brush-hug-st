@@ -11,12 +11,18 @@ import { cleanupPlan } from '../retention.js';
 import { validBinding } from '../chat.js';
 import { normalizeVersion, insertVersion, selectVersion, removeVersions, drawingGroups } from '../../server/linghuashi-storage/image-versions.mjs';
 import { normalizeBackupChats } from '../../server/linghuashi-storage/backup-records.mjs';
+import { REVIEW_LABELS } from '../prompt-workbench.js';
+import { prepareExportImage, exportFilename } from '../image-export.js';
+import { scrubBackup } from '../backup-config.js';
+import { normalizeProcessing, processingTitle } from '../novelai-processing.js';
+import { extensionMetadata } from '../extension-api.js';
+import { SDWEBUI_DEFAULTS, normalizeSDWebUI } from '../sdwebui.js';
 
 const DB_NAME = storageKey('linghuashi-drawings-v1');
 const MAX_IMAGE = 20 * 1024 * 1024;
 const MAX_ARCHIVE = 200 * 1024 * 1024;
 const MAX_RECORDS = 500;
-const SOURCE_TITLES = { novelai: 'NovelAI', comfyui: 'ComfyUI', openai: 'OpenAI兼容', unknown: '未识别' };
+const SOURCE_TITLES = { novelai: 'NovelAI', comfyui: 'ComfyUI', openai: 'OpenAI兼容', sdwebui: 'SDWebUI', unknown: '未识别' };
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const record = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const providerTitle = (value) => SOURCE_TITLES[value] || SOURCE_TITLES.unknown;
@@ -34,6 +40,16 @@ const transactionDone = (transaction) => new Promise((resolve, reject) => {
 export function normalizeSnapshot(value) {
   if (!record(value)) return null;
   const characters = value.characterScene ? { characterScene: normalizeCharacterScene(value.characterScene) } : {};
+  const external = extensionMetadata(value.extensionRequest);
+  if (external) characters.extensionRequest = external;
+  const processing = value.provider === 'novelai' ? normalizeProcessing(value.novelaiProcessing) : null;
+  if (processing) characters.novelaiProcessing = processing;
+  if (value.experiment && /^[a-f0-9-]{36}$/.test(value.experiment.id)) characters.experiment = {
+    id: value.experiment.id, mode: value.experiment.mode === 'explore' ? 'explore' : 'batch',
+    label: String(value.experiment.label || '').slice(0, 240),
+    index: Math.max(0, Math.min(31, Number(value.experiment.index) || 0)),
+    createdAt: Number(value.experiment.createdAt) || 0,
+  };
   if (value.provider === 'openai' && record(value.params)) {
     const normalized = normalizeOpenAI(value.params);
     const keys = Object.keys(OPENAI_DEFAULTS).filter((key) => Object.hasOwn(value.params, key));
@@ -47,6 +63,13 @@ export function normalizeSnapshot(value) {
     const keys = Object.keys(NOVELAI_DEFAULTS).filter((key) => Object.hasOwn(value.params, key));
     if (!keys.length) return null;
     return { provider: 'novelai', partial: value.partial === true, ...characters, params: value.partial === true ? Object.fromEntries(keys.map((key) => [key, normalized[key]])) : normalized };
+  }
+  if (value.provider === 'sdwebui' && record(value.params)) {
+    const normalized = normalizeSDWebUI(value.params);
+    const keys = [...Object.keys(SDWEBUI_DEFAULTS), 'advanced'].filter((key) => Object.hasOwn(value.params, key));
+    if (!keys.length) return null;
+    return { provider: 'sdwebui', partial: value.partial === true, ...characters,
+      params: value.partial === true ? Object.fromEntries(keys.map((key) => [key, normalized[key]])) : normalized };
   }
   if (value.provider === 'comfyui' && record(value.config)) {
     const graph = parseWorkflow(JSON.stringify(value.config.graph));
@@ -62,6 +85,7 @@ export function captureSnapshot(state) {
   const characterScene = state.characterSceneOverride ? clone(state.characterSceneOverride) : resolveCharacterScene(state.characterProfiles, chat.key, chat.avatars);
   if (state.characterSceneOverrideProvider && state.characterSceneOverrideProvider !== state.provider && characterScene) delete characterScene.applied;
   if (state.provider === 'openai') return normalizeSnapshot({ provider: 'openai', params: state.openai, characterScene });
+  if (state.provider === 'sdwebui') return normalizeSnapshot({ provider: 'sdwebui', params: state.sdwebui, characterScene });
   return normalizeSnapshot(state.provider === 'comfyui'
     ? { provider: 'comfyui', config: clone(state.comfyui), characterScene }
     : { provider: 'novelai', params: state.novelai, characterScene });
@@ -72,6 +96,7 @@ export function restoreSnapshot(state, snapshot) {
   if (!value) throw new Error('这张图片没有可导入的生图参数');
   if (value.provider === 'novelai') state.novelai = normalizeNovelAI(value.partial ? { ...state.novelai, ...value.params } : value.params);
   else if (value.provider === 'openai') state.openai = normalizeOpenAI(value.partial ? { ...state.openai, ...value.params } : value.params);
+  else if (value.provider === 'sdwebui') state.sdwebui = normalizeSDWebUI(value.partial ? { ...state.sdwebui, ...value.params } : value.params);
   else state.comfyui = clone(value.config);
   state.provider = value.provider;
   state.characterSceneOverride = value.characterScene?.entries?.length ? clone(value.characterScene) : null;
@@ -93,6 +118,7 @@ export function filterDrawings(items, filters, grouped = true) {
       && (!filters.start || date >= filters.start) && (!filters.end || date <= filters.end)
       && (!filters.favoriteOnly || item.favorite || item.groupFavorite)
       && (!filters.chatKey || item.chatBinding?.chatKey === filters.chatKey)
+      && (!filters.rating || (item.rating || 'unrated') === filters.rating)
       && (!search || `${item.title} ${item.snapshot?.params?.positive || item.snapshot?.config?.params?.positive || ''}`.toLocaleLowerCase().includes(search));
   }).sort((left, right) => right.createdAt - left.createdAt || right.id.localeCompare(left.id));
 }
@@ -386,17 +412,18 @@ export function drawingFilename(item, index = 0) {
   return `${String(index + 1).padStart(3, '0')}-${title}.${imageExtension(item.blob.type)}`;
 }
 
-export async function exportDrawings(items, withParameters = true) {
+export async function exportDrawings(items, withParameters = true, options = {}) {
   if (!items.length) throw new Error('没有可导出的图片');
   const zip = new JSZip();
   const manifest = { format: 'linghuashi-drawings', version: 1, exportedAt: new Date().toISOString(), images: [] };
   let total = 0;
   for (const [index, item] of items.entries()) {
-    total += item.blob.size;
+    const image = await prepareExportImage(item.blob, options.metadata || 'keep', scrubBackup(item.snapshot, { refs: true, sharing: true }));
+    total += image.size;
     if (total > MAX_ARCHIVE) throw new Error('单个导出包超过 200 MB，请分批多选导出');
-    const file = `images/${drawingFilename(item, index)}`;
-    zip.file(file, await item.blob.arrayBuffer());
-    if (withParameters) manifest.images.push({ file, id: item.id, title: item.title, createdAt: item.createdAt, source: item.source, favorite: item.favorite, demo: item.demo, snapshot: item.snapshot, batchId: item.batchId, chatBinding: item.chatBinding, version: item.version, versionCurrent: item.versionCurrent });
+    const file = `images/${exportFilename(item, index, options.naming)}`;
+    zip.file(file, await image.arrayBuffer());
+    if (withParameters) manifest.images.push({ file, id: item.id, title: item.title, createdAt: item.createdAt, source: item.source, favorite: item.favorite, demo: item.demo, snapshot: item.snapshot, batchId: item.batchId, chatBinding: item.chatBinding, version: item.version, versionCurrent: item.versionCurrent, rating: item.rating || 'unrated' });
   }
   if (withParameters) zip.file('linghuashi.json', JSON.stringify(manifest, null, 2));
   return zip.generateAsync({ type: 'blob', compression: 'STORE' });
@@ -420,6 +447,7 @@ export async function importArchive(file) {
     if (total > MAX_ARCHIVE) throw new Error('解压后的图片总量超过 200 MB');
     const blob = await entry.async('blob');
     const row = await makeDrawing(blob, item);
+    if (REVIEW_LABELS.some(([value]) => value === item.rating)) row.rating = item.rating;
     rows.push(row);
   }
   return rows;
@@ -445,28 +473,32 @@ export function renderDrawingManager(items, ui) {
   return `<section class="drawing-manager">
     <div class="page-heading"><div><h1>绘图管理</h1><p>${items.length} 张图片 · ${items.filter((item) => item.favorite).length} 张收藏 · ${ui.storageLocation === 'server' ? '酒馆服务器' : '浏览器'} ${formatBytes(totalBytes)}</p></div>${command('upload', '导入', 'drawing-import', busy ? 'disabled' : '')}</div>
     <form class="drawing-filters" data-drawing-filters>
-      ${field('来源模式', `<select name="source">${options([['all', '全部来源'], ['novelai', 'NovelAI'], ['comfyui', 'ComfyUI'], ['openai', 'OpenAI兼容'], ['unknown', '未识别来源']], ui.filters.source)}</select>`)}
+      ${field('来源模式', `<select name="source">${options([['all', '全部来源'], ['novelai', 'NovelAI'], ['comfyui', 'ComfyUI'], ['openai', 'OpenAI兼容'], ['sdwebui', 'SDWebUI'], ['unknown', '未识别来源']], ui.filters.source)}</select>`)}
       <div class="drawing-date-range">${field('开始日期', `<input type="date" name="start" value="${esc(ui.filters.start)}" />`)}${field('结束日期', `<input type="date" name="end" value="${esc(ui.filters.end)}" />`)}</div>
       <div class="drawing-filter-actions"><button type="submit" class="ui-button primary">${icon('list-filter')}<span>筛选</span></button>${iconCommand('rotate-ccw', '重置筛选', 'drawing-reset-filters')}</div>
       <label class="search-input drawing-search">${icon('search')}<input name="search" placeholder="搜索名称或提示词" value="${esc(ui.filters.search)}" /></label>
       <label class="drawing-favorite-only"><input type="checkbox" name="favoriteOnly" ${ui.filters.favoriteOnly ? 'checked' : ''} />${icon('star')}仅收藏</label>
       ${chats.length ? field('聊天归档', `<select name="chatKey">${options([['', '全部图片'], ...chats], ui.filters.chatKey || '')}</select>`) : ''}
+      ${field('筛图分类', `<select name="rating">${options([['', '全部分类'], ...REVIEW_LABELS], ui.filters.rating || '')}</select>`)}
     </form>
     <div class="drawing-toolbar">
       <span class="drawing-summary">${ui.loading ? '正在读取图片…' : `${filtered.length} 个图组 · 第 ${page.page} / ${page.pages} 页`}${selected ? ` · 已选 ${selected} 组` : ''}${ui.busy ? ' · 正在处理…' : ''}</span>
       <div class="drawing-commands">${iconCommand('refresh-cw', '刷新图片', 'drawing-refresh', busy ? 'disabled' : '')}
+        ${command('scan-eye', '快速筛图', 'drawing-review', busy || !filtered.length ? 'disabled' : '')}
         ${command('check-check', ui.multiselect ? '结束多选' : '多选', 'drawing-multiselect', `aria-pressed="${ui.multiselect}"`)}
         ${command('archive', selected ? '导出所选' : '导出', 'drawing-export', busy || !(selected || filtered.length) ? 'disabled' : '')}
         ${command('arrow-down-to-line', selected ? '下载所选' : '下载全部', 'drawing-download-all', busy || !(selected || filtered.length) ? 'disabled' : '')}
         ${command('trash-2', selected ? '删除所选图组' : '删除本页图组', 'drawing-delete', busy || !(selected || page.items.length) ? 'disabled' : '', 'drawing-delete')}
       </div>
     </div>
+    <div class="drawing-export-options">${field('导出文件名', `<select data-drawing-export="naming">${options([['index-title', '序号 + 名称'], ['index-seed', '序号 + 种子'], ['index-model', '序号 + 模型']], ui.exportOptions?.naming || 'index-title')}</select>`)}
+      ${field('PNG 元数据', `<select data-drawing-export="metadata">${options([['keep', '保留原有'], ['remove', '移除文本与 EXIF'], ['embed', '写入灵画师参数']], ui.exportOptions?.metadata || 'keep')}</select>`)}</div>
     ${ui.multiselect ? `<div class="drawing-selection-bar"><label><input type="checkbox" data-drawing-select-page ${page.items.length && page.items.every((item) => ui.selection.has(item.id)) ? 'checked' : ''} ${!page.items.length ? 'disabled' : ''} />全选本页</label><span>已选 ${selected} 个图组</span>${command('x', '取消选择', 'drawing-clear-selection')}</div>` : ''}
     ${ui.error ? `<p class="drawing-error" role="alert">${esc(ui.error)}</p>` : ''}
     <div class="drawing-grid">${page.items.length ? page.items.map((item, index) => `<article class="drawing-tile ${ui.selection.has(item.id) ? 'is-selected' : ''}">
       ${ui.multiselect ? `<label class="drawing-select"><input type="checkbox" data-drawing-select="${item.id}" aria-label="选择${esc(item.title)}" ${ui.selection.has(item.id) ? 'checked' : ''} /></label>` : ''}
-      <button type="button" class="drawing-image" data-action="viewer" data-image="${item.id}" aria-label="放大${esc(item.title)}"><img src="${item.thumbSrc}" alt="${esc(item.title)}" loading="lazy" /><span class="drawing-source source-${item.source}">${item.source === 'novelai' ? 'NAI' : item.source === 'comfyui' ? 'ComfyUI' : item.source === 'openai' ? 'OpenAI' : '图片'}</span>${item.demo ? '<span class="drawing-demo">示例</span>' : ''}<span class="drawing-image-info"><span>#${(page.page - 1) * ui.pageSize + index + 1}</span><span>${item.width} × ${item.height}</span></span></button>
-      <div class="drawing-tile-body"><strong title="${esc(item.title)}">${esc(item.title)}</strong><div><time>${dateKey(item.createdAt)}</time>${iconCommand('star', item.favorite ? '取消收藏' : '收藏图片', 'favorite', `data-image="${item.id}" aria-pressed="${item.favorite}"`)}</div><div class="drawing-version-count"><span class="drawing-param-state">${item.snapshot ? item.snapshot.partial ? '部分参数' : '含生图参数' : '无参数记录'}</span><button type="button" data-action="viewer" data-image="${item.id}" title="查看历史版本">${icon('history')}<span>${item.versionCount} 版</span></button></div></div>
+      <button type="button" class="drawing-image" data-action="viewer" data-image="${item.id}" aria-label="放大${esc(item.title)}"><img src="${item.thumbSrc}" alt="${esc(item.title)}" loading="lazy" /><span class="drawing-source source-${item.source}">${item.source === 'novelai' ? 'NAI' : item.source === 'comfyui' ? 'ComfyUI' : item.source === 'openai' ? 'OpenAI' : item.source === 'sdwebui' ? 'SDWebUI' : '图片'}</span>${item.demo ? '<span class="drawing-demo">示例</span>' : ''}<span class="drawing-image-info"><span>#${(page.page - 1) * ui.pageSize + index + 1}</span><span>${item.width} × ${item.height}</span></span></button>
+      <div class="drawing-tile-body"><strong title="${esc(item.title)}">${esc(item.title)}</strong><div><time>${dateKey(item.createdAt)}</time>${iconCommand('star', item.favorite ? '取消收藏' : '收藏图片', 'favorite', `data-image="${item.id}" aria-pressed="${item.favorite}"`)}</div><div class="drawing-version-count"><span class="drawing-param-state">${item.snapshot ? item.snapshot.partial ? '部分参数' : '含生图参数' : '无参数记录'}</span><button type="button" data-action="viewer" data-image="${item.id}" title="查看历史版本">${icon('history')}<span>${item.versionCount} 版</span></button></div><span class="drawing-review-label">${REVIEW_LABELS.find(([value]) => value === (item.rating || 'unrated'))?.[1] || '未分类'}</span></div>
     </article>`).join('') : `<div class="drawing-empty">${icon('images')}<strong>${ui.loading ? '正在载入' : '暂无匹配图片'}</strong>${!ui.loading ? command('upload', '导入图片', 'drawing-import') : ''}</div>`}</div>
     <footer class="drawing-pagination"><label>每页<select data-drawing-page-size>${options([['12', '12'], ['24', '24'], ['48', '48']], String(ui.pageSize))}</select>张</label><div>${iconCommand('chevron-left', '上一页', 'drawing-prev-page', page.page === 1 ? 'disabled' : '')}<span>${page.page} / ${page.pages}</span>${iconCommand('chevron-right', '下一页', 'drawing-next-page', page.page === page.pages ? 'disabled' : '')}</div></footer>
   </section>`;
@@ -491,6 +523,19 @@ export function renderDrawingViewer(item, position, total, ui) {
     ['尺寸', `${params.width ?? '—'} × ${params.height ?? '—'}`], ['步数 / CFG', `${params.steps ?? '—'} / ${params.scale ?? params.cfg ?? '—'}`],
     ['种子', params.seed ?? '未记录'], ['采样器', params.sampler || '未记录'], ['调度器', params.noiseSchedule || params.scheduler || '未记录'],
   ] : [['来源', providerTitle(item.source)], ['图片尺寸', `${item.width} × ${item.height}`], ['文件大小', formatBytes(item.blob.size)]];
+  const processing = item.snapshot?.novelaiProcessing;
+  if (processing) {
+    if (processing.kind !== 'enhance') rows.splice(0, rows.length, ['来源', providerTitle(item.source)],
+      ['处理输入', `${processing.width} × ${processing.height}`]);
+    rows.unshift(['图片处理', `${processingTitle(processing)}${processing.variant ? ` · ${processing.variant}` : ''}`],
+      ['处理原图', `${processing.inputWidth} × ${processing.inputHeight}`], ['实际结果', `${item.width} × ${item.height}`]);
+    if (processing.kind === 'upscale') rows.push(['放大模型', 'nai-diffusion-5-curated']);
+    if (processing.kind === 'enhance') rows.push(['强度 / 噪声', `${processing.strength} / ${processing.noise}`]);
+    if (processing.kind === 'director' && ['colorize', 'emotion'].includes(processing.tool)) {
+      rows.push(['Defry', processing.defry], ['处理提示词', processing.prompt || '未填写']);
+      if (processing.tool === 'emotion') rows.push(['表情', processing.emotion]);
+    }
+  }
   return `<dialog class="drawing-viewer ${ui.details ? 'show-details' : ''} ${ui.zoom ? 'actual-size' : ''}" aria-label="查看图片：${esc(item.title)}">
     <header><div><strong>${esc(item.title)}</strong><span>${position + 1} / ${total}${item.demo ? ' · 示例图片' : ''}</span></div><div>
       ${iconCommand(ui.zoom ? 'maximize-2' : 'zoom-in', ui.zoom ? '适应窗口' : '原始尺寸', 'viewer-zoom')}
@@ -498,8 +543,13 @@ export function renderDrawingViewer(item, position, total, ui) {
       ${iconCommand('star', item.favorite ? '取消收藏' : '收藏图片', 'favorite', `data-image="${item.id}" aria-pressed="${item.favorite}"`)}
       ${iconCommand('arrow-down-to-line', '下载图片', 'download', `data-image="${item.id}"`)}
       ${iconCommand('x', '关闭大图', 'close-viewer')}</div></header>
+    <div class="drawing-version-bar drawing-review-tools" aria-label="筛图标记">${REVIEW_LABELS.map(([value, label], index) =>
+      command(['circle', 'gem', 'check', 'x'][index], label, 'viewer-review', `data-rating="${value}" aria-pressed="${(item.rating || 'unrated') === value}"`)).join('')}
+      ${iconCommand('undo-2', '撤销上一次筛图标记', 'viewer-review-undo', ui.reviewHistory?.length ? '' : 'disabled')}
+      ${ui.review ? '<span>快速筛图</span>' : ''}</div>
     <div class="drawing-version-bar"><div>${iconCommand('chevron-left', '上一个版本', 'version-prev', versionIndex <= 0 ? 'disabled' : '')}<select data-viewer-version aria-label="历史版本">${versions.map((row) => `<option value="${row.id}" ${row.id === item.id ? 'selected' : ''}>版本 ${normalizeVersion(row.version, row.id).number}${row.id === ui.currentId ? ' · 当前' : ''}</option>`).join('')}</select>${iconCommand('chevron-right', '下一个版本', 'version-next', versionIndex >= versions.length - 1 ? 'disabled' : '')}</div>
       <div>${command('pencil', '编辑这张图', 'viewer-edit', item.snapshot ? '' : 'disabled')}
+      ${command('wand-sparkles', '图片增强', 'viewer-enhance')}
       ${command('image-plus', '作为底图', 'viewer-source')}${command('palette', '作为参考图', 'viewer-reference')}
       ${command('check', selected ? '当前版本' : '设为当前版本', 'version-select', selected ? 'disabled' : '')}
       ${iconCommand('columns-2', '比较版本', 'version-compare', `aria-pressed="${Boolean(ui.compare)}" ${versions.length < 2 ? 'disabled' : ''}`)}

@@ -89,7 +89,7 @@ export async function createBackup({ state, sections, layout = null, kind = 'con
     delete config.connections; delete config.connectionProfiles; delete config.connectionProfileIds;
     delete config.presetBindings;
     if (config.characterProfiles) { config.characterProfiles.chats = []; config.characterProfiles.selection = []; }
-    for (const key of ['novelaiPresets', 'openaiPresets', 'comfyPresets']) for (const item of config[key] || []) {
+    for (const key of ['novelaiPresets', 'openaiPresets', 'comfyPresets', 'sdwebuiPresets']) for (const item of config[key] || []) {
       delete item.connection; item.connectionProfileId = '';
     }
   }

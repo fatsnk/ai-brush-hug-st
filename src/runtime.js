@@ -1,10 +1,32 @@
 import { createCredentialVault } from './credential-vault.js';
+import { apiError } from './extension-api.js';
 
 const environment = () => window.__LINGHUASHI_ENV__ || {};
 const secretRequests = new Map();
 const storageRequests = new Map();
 let previewVault;
 const assistantRequests = new Map();
+const extensionChatRequests = new Map();
+window.addEventListener('message', (event) => {
+  if (event.origin !== location.origin || event.source !== window.parent || event.data?.type !== 'linghuashi:extension-chat-result') return;
+  extensionChatRequests.get(event.data.requestId)?.(event.data);
+});
+
+export function extensionChatRequest(value) {
+  if (!isInstalled()) return Promise.reject(apiError('CHAT_TARGET_INVALID', '聊天目标需在酒馆内使用'));
+  return new Promise((resolve, reject) => {
+    const requestId = crypto.randomUUID();
+    const timer = setTimeout(() => {
+      extensionChatRequests.delete(requestId);
+      reject(apiError('CHAT_TARGET_INVALID', '聊天关联超时，请核对消息与任务记录'));
+    }, 125000);
+    extensionChatRequests.set(requestId, (data) => {
+      clearTimeout(timer); extensionChatRequests.delete(requestId);
+      if (data.error) reject(apiError(data.error.code, data.error.message)); else resolve(data.value);
+    });
+    window.parent.postMessage({ type: 'linghuashi:extension-chat-request', requestId, ...value }, location.origin);
+  });
+}
 
 window.addEventListener('message', (event) => {
   if (event.origin !== location.origin || event.source !== window.parent || event.data?.type !== 'linghuashi:assistant-result') return;

@@ -1,0 +1,131 @@
+.tag-library { min-width: 0; }
+.tag-toolbar, .tag-filters, .tag-editor-actions, .tag-pagination { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.tag-toolbar { margin-bottom: 14px; }
+.tag-toolbar .search-input { flex: 1 1 200px; min-width: 0; }
+.tag-toolbar select, .tag-filters select { max-width: 100%; min-height: 34px; border: 1px solid var(--border); border-radius: 4px; color: var(--text); background: var(--surface); font: inherit; padding: 6px; }
+.tag-toolbar > select { max-width: 150px; }
+.tag-filters { justify-content: space-between; border-bottom: 1px solid var(--border); padding-bottom: 12px; }
+.tag-views { display: flex; flex-wrap: wrap; gap: 4px; }
+.tag-views button { border: 0; border-bottom: 2px solid transparent; color: var(--muted); background: transparent; font: inherit; cursor: pointer; padding: 8px 10px; }
+.tag-views button[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+.tag-filters .ui-field { display: flex; align-items: center; gap: 8px; margin: 0; }
+.tag-results-heading { display: flex; gap: 8px; flex-wrap: wrap; justify-content: space-between; font-size: 12px; color: var(--muted); padding: 12px 0; }
+.tag-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
+.tag-item { display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); }
+.tag-item > button { flex: 1; min-width: 0; padding: 10px; border: 0; border-radius: 4px 0 0 4px; color: var(--text); background: transparent; text-align: left; font: inherit; cursor: pointer; }
+.tag-item > button:hover, .tag-item > button[aria-pressed="true"] { background: var(--soft); }
+.tag-item > button:disabled { opacity: .5; cursor: default; }
+.tag-item strong { display: flex; gap: 4px; align-items: center; font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
+.tag-item strong svg { width: 14px; height: 14px; color: var(--accent); flex: none; }
+.tag-item small { display: block; font-size: 11px; color: var(--muted); margin-top: 5px; overflow-wrap: anywhere; }
+.tag-item-tools { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px; padding: 2px 5px; border-top: 1px solid var(--border); }
+.tag-item-tools .ui-icon-button { width: 28px; height: 28px; }
+.tag-item-tools [aria-pressed="true"] { color: var(--accent); }
+.tag-item-tools [aria-pressed="true"] svg { fill: var(--soft); }
+.tag-pagination { justify-content: center; margin: 18px 0; color: var(--muted); font-size: 12px; }
+.tag-empty { grid-column: 1 / -1; padding: 28px 0; color: var(--muted); }
+.tag-current { width: 100%; min-width: 0; resize: vertical; }
+.tag-mode { display: flex; gap: 4px; margin: 12px 0; }
+.tag-mode button { display: inline-flex; align-items: center; justify-content: center; min-height: 34px; border: 1px solid var(--border); border-radius: 4px; padding: 6px 12px; color: var(--muted); background: var(--surface); font: inherit; font-size: 12px; cursor: pointer; }
+.tag-mode button[aria-pressed="true"] { background: var(--soft); color: var(--accent); border-color: var(--accent); }
+.tag-workspace, .tag-catalog { min-width: 0; }
+.tag-workspace.is-composing { display: grid; grid-template-columns: minmax(200px, .7fr) minmax(500px, 1.6fr); gap: 14px; align-items: start; }
+.is-composing .tag-catalog { grid-column: 1; grid-row: 1; }
+.tag-composers { grid-column: 2; grid-row: 1; position: sticky; top: 12px; min-width: 0; max-height: calc(100dvh - 140px); overflow-y: auto; overscroll-behavior: contain; }
+.tag-composers.is-paired { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: start; }
+.tag-composer { box-sizing: border-box; min-width: 0; padding: 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
+.tag-composer.is-active { border-color: var(--accent); }
+.tag-composer.is-disabled { color: var(--muted); font-size: 12px; }
+.tag-composer.is-disabled h2 { margin: 0; font-size: 14px; }
+.tag-pair-actions { grid-column: 1 / -1; position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 6px 0; background: var(--surface); }
+.tag-pair-actions .ui-button { color: var(--accent); border-color: var(--accent); }
+.tag-conflicts { font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.tag-composer-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; }
+.tag-composer-heading h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.tag-composer-heading > span { color: var(--muted); font-size: 11px; }
+.tag-composer-tools, .tag-composer-actions, .tag-template-tools { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.tag-composer-tools { margin-bottom: 10px; }
+.tag-composer-tools .ui-button, .tag-composer-actions .ui-button { font-size: 12px; min-height: 32px; padding: 6px 10px; }
+.tag-composer .ui-field { margin-top: 10px; }
+.tag-composer select { width: 100%; min-width: 0; }
+.tag-composer textarea, .tag-template-editor textarea, .tag-template-editor input { box-sizing: border-box; width: 100%; min-width: 0; resize: vertical; }
+.tag-composer-items { margin: 12px 0; padding: 0; list-style: none; max-height: 340px; overflow: auto; overscroll-behavior: contain; }
+.tag-composer-items li:not(.tag-empty) { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.tag-composer-items li[draggable="true"] { cursor: grab; }
+.tag-composer-name { display: flex; align-items: center; gap: 5px; flex: 1 1 100%; min-width: 0; }
+.tag-composer-name > div { min-width: 0; }
+.tag-composer-name > input { width: 14px; height: 14px; flex: none; margin: 0; accent-color: var(--accent); }
+.tag-composer-name > .ui-icon-button { width: 26px; height: 26px; flex: none; }
+.tag-composer-name strong { font-size: 12px; font-weight: 500; overflow-wrap: anywhere; }
+.tag-composer-name small { display: block; color: var(--muted); font-size: 11px; margin-top: 3px; overflow-wrap: anywhere; }
+.is-unknown .tag-composer-name strong { color: var(--muted); }
+.tag-composer-item-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 2px; width: 100%; }
+.tag-composer-item-tools .ui-icon-button { width: 26px; height: 26px; flex: none; }
+.tag-composer-item-tools .ui-icon-button svg { width: 13px; height: 13px; }
+.tag-composer-weight { display: inline-block; width: 36px; flex: none; text-align: center; color: var(--muted); font-size: 11px; }
+.tag-composer-note { min-height: 16px; margin: 8px 0; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.tag-composer-actions { margin-top: 10px; }
+.tag-composer-actions [data-tag-action="apply-composition"] { color: var(--accent); border-color: var(--accent); }
+.tag-group-children { box-sizing: border-box; flex: 1 1 100%; min-width: 0; margin: 3px 0 0 6px; padding: 0 0 0 8px; list-style: none; border-left: 2px solid var(--border); }
+.tag-details { margin: 12px 0; padding: 14px 0; border-block: 1px solid var(--border); }
+.tag-details-heading, .tag-detail-actions, .tag-aliases { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.tag-details-heading { justify-content: space-between; }
+.tag-details h2 { font-size: 16px; margin: 0 0 4px; }
+.tag-details small, .tag-details-category { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.tag-details-content { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; margin-top: 12px; }
+.tag-details-content p { line-height: 1.7; font-size: 13px; margin: 8px 0; overflow-wrap: anywhere; }
+.tag-aliases { margin: 10px 0; font-size: 12px; color: var(--muted); }
+.tag-aliases button { border: 0; border-bottom: 1px dotted var(--border); padding: 3px 0; color: var(--accent); background: transparent; font: inherit; cursor: pointer; }
+.tag-detail-actions .ui-button, .tag-detail-actions a { font-size: 12px; }
+.tag-detail-actions a { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); }
+.tag-detail-actions a svg { width: 14px; height: 14px; }
+.tag-detail-preview { margin: 0; width: 192px; min-height: 110px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
+.tag-detail-preview img { display: block; object-fit: contain; max-width: 100%; }
+.tag-detail-preview figcaption { font-size: 11px; color: var(--muted); }
+.tag-custom-preview { object-fit: contain; margin-top: 12px; }
+.tag-templates { margin: 12px 0; padding: 10px 0; border-block: 1px solid var(--border); }
+.tag-templates > summary { cursor: pointer; font-size: 13px; color: var(--text); }
+.tag-templates > summary span { margin-left: 6px; color: var(--muted); font-size: 11px; }
+.tag-template-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; margin-top: 12px; max-height: 300px; overflow: auto; overscroll-behavior: contain; }
+.tag-template { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-width: 0; padding: 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); }
+.tag-template > div:first-child { min-width: 0; }
+.tag-template strong { display: block; font-size: 12px; font-weight: 500; overflow-wrap: anywhere; }
+.tag-template small { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; }
+.tag-template-tools { flex: none; flex-wrap: nowrap; gap: 2px; }
+.tag-template-tools .ui-icon-button { width: 26px; height: 26px; }
+.tag-template-editor { padding: 16px 0; border-bottom: 1px solid var(--border); }
+.tag-status { min-height: 26px; padding-top: 8px; font-size: 12px; color: var(--accent); overflow-wrap: anywhere; }
+.tag-editor { border-block: 1px solid var(--border); padding: 16px 0; margin: 12px 0; }
+.tag-editor-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.tag-editor input, .tag-editor textarea { width: 100%; min-width: 0; box-sizing: border-box; }
+.tag-editor-actions { margin-top: 12px; }
+.prompt-tags-label { display: flex !important; justify-content: space-between; gap: 8px; align-items: center; }
+.prompt-tags-button { display: inline-flex; align-items: center; gap: 4px; flex: none; border: 0; padding: 3px 4px; background: transparent; color: var(--accent); font: inherit; font-size: 12px; cursor: pointer; }
+.prompt-tags-button svg { width: 14px; height: 14px; }
+.tag-picker { box-sizing: border-box; width: min(1100px, calc(100vw - 24px)); max-width: calc(100vw - 24px); max-height: calc(100dvh - 24px); padding: 0; border: 1px solid var(--border); border-radius: 6px; color: var(--text); background: var(--surface); }
+.tag-picker::backdrop { background: rgb(0 0 0 / .45); }
+.tag-picker > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--border); }
+.tag-picker h2 { font-size: 16px; margin: 0; }
+.tag-picker-body { overflow-y: auto; max-height: calc(100dvh - 100px); padding: 16px 18px; }
+@media (max-width: 600px) {
+  .tag-toolbar .search-input { flex-basis: 100%; }
+  .tag-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .tag-item > button { padding: 8px 6px; }
+  .tag-editor-fields { grid-template-columns: minmax(0, 1fr); }
+  .tag-picker-body { padding: 12px; }
+  .tag-views button { padding-inline: 8px; }
+  .tag-template-grid { grid-template-columns: minmax(0, 1fr); }
+  .tag-composer-item-tools .ui-icon-button { width: 30px; height: 30px; }
+  .tag-composers.is-paired { grid-template-columns: minmax(0, 1fr); }
+  .tag-details-content { grid-template-columns: minmax(0, 1fr); }
+  .tag-detail-preview { width: 100%; }
+}
+@media (max-width: 1000px) {
+  .tag-workspace.is-composing { display: flex; flex-direction: column; }
+  .tag-composers { position: static; box-sizing: border-box; width: 100%; max-height: none; overflow: visible; }
+  .tag-pair-actions { position: static; }
+  .tag-composer-items { max-height: 260px; }
+  .tag-composer-name { flex-basis: 150px; }
+  .tag-composer-item-tools { width: auto; margin-left: auto; }
+  .is-composing .tag-catalog { width: 100%; }
+}

@@ -335,10 +335,10 @@ export function renderComfyWorkflow(state, probe, expanded = {}) {
   </section>`;
 }
 
-export function renderComfyPresets(state) {
+export function renderComfyPresets(state, actions = '') {
   return `<div class="nai-presets">
     ${field('工作流预设', `<select data-comfy-preset>${options([['default', '基础文生图'], ...state.comfyPresets.map((preset) => [preset.id, preset.name])], state.comfyPresetId)}</select>`)}
-    <div class="nai-preset-actions">${command('folder-open', '载入预设', 'comfy-load-preset')}${command('save', '保存预设', 'comfy-save-preset')}${command('copy-plus', '另存为', 'comfy-save-as')}<button type="button" class="ui-icon-button" data-action="comfy-delete-preset" title="删除工作流预设" aria-label="删除工作流预设" ${state.comfyPresetId === 'default' ? 'disabled' : ''}>${icon('trash-2')}</button></div>
+    <div class="nai-preset-actions">${command('folder-open', '载入预设', 'comfy-load-preset')}${command('save', '保存预设', 'comfy-save-preset')}${command('copy-plus', '另存为', 'comfy-save-as')}${actions}<button type="button" class="ui-icon-button" data-action="comfy-delete-preset" title="删除工作流预设" aria-label="删除工作流预设" ${state.comfyPresetId === 'default' ? 'disabled' : ''}>${icon('trash-2')}</button></div>
   </div>`;
 }
 

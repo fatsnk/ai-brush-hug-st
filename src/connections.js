@@ -1,4 +1,4 @@
-export const CONNECTION_PROVIDERS = ['novelai', 'openai', 'comfyui'];
+export const CONNECTION_PROVIDERS = ['novelai', 'openai', 'comfyui', 'sdwebui'];
 const text = (value, max) => typeof value === 'string' ? value.slice(0, max) : '';
 const timeout = (value, fallback, max) => Math.max(5, Math.min(max, Math.round(Number(value) || fallback)));
 
@@ -18,6 +18,13 @@ export function normalizeConnection(provider, value = {}) {
   } else if (provider === 'comfyui') {
     result.auth = input.auth === 'bearer' ? 'bearer' : 'none';
     result.timeout = timeout(input.timeout, 15, 120);
+  } else if (provider === 'sdwebui') {
+    result.auth = ['basic', 'bearer'].includes(input.auth) ? input.auth : 'none';
+    result.username = text(input.username, 200);
+    result.timeout = timeout(input.timeout, 600, 600);
+    result.textTaskId = input.textTaskId === true;
+    result.imageTaskId = input.imageTaskId === true;
+    result.progressMode = ['internal', 'native'].includes(input.progressMode) ? input.progressMode : 'none';
   }
   return result;
 }
@@ -53,14 +60,14 @@ export function normalizeConnections(state) {
         return entry.id;
       };
       state.connectionProfileIds[provider] = add('当前接口', current);
-      const presets = state[{ novelai: 'novelaiPresets', openai: 'openaiPresets', comfyui: 'comfyPresets' }[provider]] || [];
+      const presets = state[{ novelai: 'novelaiPresets', openai: 'openaiPresets', comfyui: 'comfyPresets', sdwebui: 'sdwebuiPresets' }[provider]] || [];
       for (const preset of presets) {
         if (preset.connection && entries.length < 50) add(preset.name, normalizeConnection(provider, preset.connection));
       }
     } else state.connectionProfileIds[provider] = entries.some((entry) => entry.id === selected[provider]) ? selected[provider] : '';
     state.connectionProfiles[provider] = entries;
-    const preset = state[{ novelai: 'novelaiPresets', openai: 'openaiPresets', comfyui: 'comfyPresets' }[provider]]
-      ?.find((entry) => entry.id === state[{ novelai: 'novelaiPresetId', openai: 'openaiPresetId', comfyui: 'comfyPresetId' }[provider]]);
+    const preset = state[{ novelai: 'novelaiPresets', openai: 'openaiPresets', comfyui: 'comfyPresets', sdwebui: 'sdwebuiPresets' }[provider]]
+      ?.find((entry) => entry.id === state[{ novelai: 'novelaiPresetId', openai: 'openaiPresetId', comfyui: 'comfyPresetId', sdwebui: 'sdwebuiPresetId' }[provider]]);
     state.presetBindings[provider] = preset?.connectionProfileId || (preset?.connection ? 'legacy' : '');
   }
   state.connectionLibraryVersion = 1;
@@ -153,7 +160,7 @@ export function deleteConnectionProfile(state, provider, id) {
   assertProvider(provider);
   state.connectionProfiles[provider] = state.connectionProfiles[provider].filter((entry) => entry.id !== id);
   if (state.connectionProfileIds[provider] === id) state.connectionProfileIds[provider] = '';
-  for (const preset of state[{ novelai: 'novelaiPresets', openai: 'openaiPresets', comfyui: 'comfyPresets' }[provider]]) {
+  for (const preset of state[{ novelai: 'novelaiPresets', openai: 'openaiPresets', comfyui: 'comfyPresets', sdwebui: 'sdwebuiPresets' }[provider]] || []) {
     if (preset.connectionProfileId === id) preset.connectionProfileId = '';
   }
   if (state.presetBindings[provider] === id) state.presetBindings[provider] = '';

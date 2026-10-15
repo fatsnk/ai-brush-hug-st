@@ -11,8 +11,10 @@ export const navigation = [
   { id: 'assistant', title: '提示词助手', icon: 'sparkles' },
   { id: 'characters', title: '角色档案', icon: 'users-round' },
   { id: 'styles', title: '画师串库', icon: 'palette' },
+  { id: 'tags', title: '中文标签库', icon: 'list-filter' },
   { id: 'generate', title: '生图工坊', icon: 'wand-sparkles' },
   { id: 'gallery', title: '绘图管理', icon: 'images' },
+  { id: 'changelog', title: '更新日志', icon: 'history' },
 ];
 
 export const styles = [

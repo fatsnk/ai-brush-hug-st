@@ -261,9 +261,9 @@ export function renderOpenAIParameters(state, models = [], advancedOpen = false,
   </section>`;
 }
 
-export function renderOpenAIPresets(state) {
+export function renderOpenAIPresets(state, actions = '') {
   return `<div class="nai-presets">
       ${field('参数预设', `<select data-openai-preset>${options([['default', '默认配置'], ...state.openaiPresets.map((preset) => [preset.id, preset.name])], state.openaiPresetId)}</select>`)}
-      <div class="nai-preset-actions">${command('folder-open', '载入预设', 'openai-load-preset')}${command('save', '保存预设', 'openai-save-preset')}${command('copy-plus', '另存为', 'openai-save-as')}<button type="button" class="ui-icon-button" data-action="openai-delete-preset" title="删除当前预设" aria-label="删除当前预设" ${state.openaiPresetId === 'default' ? 'disabled' : ''}>${icon('trash-2')}</button></div>
+      <div class="nai-preset-actions">${command('folder-open', '载入预设', 'openai-load-preset')}${command('save', '保存预设', 'openai-save-preset')}${command('copy-plus', '另存为', 'openai-save-as')}${actions}<button type="button" class="ui-icon-button" data-action="openai-delete-preset" title="删除当前预设" aria-label="删除当前预设" ${state.openaiPresetId === 'default' ? 'disabled' : ''}>${icon('trash-2')}</button></div>
     </div>`;
 }

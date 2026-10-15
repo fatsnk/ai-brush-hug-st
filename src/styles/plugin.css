@@ -413,6 +413,7 @@ button, strong, label { overflow-wrap: anywhere; }
 .ui-status.warning { color: var(--warning); }
 .ui-status.danger { color: var(--danger); }
 .result-frame { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--surface); }
+.result-frame--pending { border: 0; border-radius: 0; background: transparent; }
 .image-open { position: relative; display: block; width: 100%; overflow: hidden; }
 .image-open > img { width: 100%; aspect-ratio: 1.15; object-fit: cover; }
 .image-expand { position: absolute; right: 10px; bottom: 10px; width: 27px; height: 27px; display: grid; place-items: center; background: #fbfcffeb; color: #152b64; border-radius: 4px; opacity: 0; transition: opacity .15s; }
@@ -453,7 +454,7 @@ button, strong, label { overflow-wrap: anywhere; }
 .bottom-actions { display: flex; align-items: center; gap: 18px; }
 .bottom-actions .primary svg { width: 15px; height: 15px; color: var(--action-text); }
 .settings-content { width: 100%; max-width: 660px; }
-.provider-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 11px; margin-bottom: 28px; }
+.provider-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; margin-bottom: 28px; }
 .provider-options button { border: 1px solid var(--border); border-radius: var(--radius); padding: 13px 11px; text-align: left; display: flex; align-items: center; gap: 8px; min-width: 0; }
 .provider-options .selected { border-color: var(--accent); background: var(--accent-soft); }
 .provider-options button > svg:first-child { color: var(--accent); width: 16px; }

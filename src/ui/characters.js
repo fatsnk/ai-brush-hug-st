@@ -46,7 +46,8 @@ export function renderCharacters(state, ui, chat) {
   const options = [...ui.characters];
   if (draft?.avatar && !options.some((item) => item.avatar === draft.avatar)) options.push({ avatar: draft.avatar, name: '已关联角色卡' });
   return `<div class="page-heading"><div><h1>多角色档案</h1><p>${profiles.length} 个档案${ui.dirty ? ' · 有未保存的修改' : ''}</p></div>
-    ${command('new-character', 'plus', '新建角色', db.profiles.length >= 100 || ui.scope === 'chat', true)}</div>
+    <div class="assistant-actions">${command('profile-ai-open', 'wand-sparkles', 'AI 创建档案', false, true)}
+    ${command('new-character', 'plus', '新建角色', db.profiles.length >= 100 || ui.scope === 'chat')}</div></div>
     <div class="character-toolbar">
       <div class="character-scope" role="group" aria-label="档案范围">
         <button type="button" data-profile-scope="global" aria-pressed="${ui.scope === 'global'}">全局档案</button>

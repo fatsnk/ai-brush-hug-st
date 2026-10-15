@@ -1,0 +1,23 @@
+.changelog-page { min-width: 0; }
+.changelog-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.changelog-entries { border-bottom: 1px solid var(--border); }
+.changelog-entry { border-top: 1px solid var(--border); }
+.changelog-entry > summary { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 12px 10px; color: var(--ink); cursor: pointer; list-style: none; }
+.changelog-entry > summary::-webkit-details-marker { display: none; }
+.changelog-entry > summary:hover { background: var(--accent-soft); }
+.changelog-entry > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.changelog-entry > summary strong { font-size: 14px; }
+.changelog-current { color: var(--accent); font-size: 11px; }
+.changelog-count { margin-left: auto; color: var(--muted); font-size: 11px; white-space: nowrap; }
+.changelog-entry > summary svg { width: 16px; height: 16px; flex-shrink: 0; color: var(--muted); }
+.changelog-entry[open] > summary { background: var(--accent-soft); }
+.changelog-entry[open] > summary svg { transform: rotate(180deg); }
+.changelog-entry > ul { margin: 0; padding: 16px 12px 20px 30px; font-size: 12px; line-height: 1.9; }
+.changelog-entry li { padding-left: 3px; overflow-wrap: anywhere; }
+.changelog-entry li + li { margin-top: 8px; }
+.changelog-entry li::marker { color: var(--accent); }
+.changelog-entry code { padding: 1px 4px; border-radius: 3px; background: var(--soft); font-size: .95em; white-space: normal; }
+@media (max-width: 420px) {
+  .changelog-entry > summary { gap: 8px; padding-inline: 5px; }
+  .changelog-entry > ul { padding-left: 22px; padding-right: 5px; }
+}

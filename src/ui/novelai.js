@@ -202,9 +202,9 @@ export function renderNovelAIParameters(state, advancedOpen = false) {
   </section>`;
 }
 
-export function renderNovelAIPresets(state) {
+export function renderNovelAIPresets(state, actions = '') {
   return `<div class="nai-presets">
       ${field('参数预设', `<select data-nai-preset>${options([['default', '默认配置'], ...state.novelaiPresets.map((preset) => [preset.id, preset.name])], state.novelaiPresetId)}</select>`)}
-      <div class="nai-preset-actions">${command('folder-open', '载入预设', 'nai-load-preset')}${command('save', '保存预设', 'nai-save-preset')}${command('copy-plus', '另存为', 'nai-save-as')}<button type="button" class="ui-icon-button" data-action="nai-delete-preset" title="删除当前预设" aria-label="删除当前预设" ${state.novelaiPresetId === 'default' ? 'disabled' : ''}>${icon('trash-2')}</button></div>
+      <div class="nai-preset-actions">${command('folder-open', '载入预设', 'nai-load-preset')}${command('save', '保存预设', 'nai-save-preset')}${command('copy-plus', '另存为', 'nai-save-as')}${actions}<button type="button" class="ui-icon-button" data-action="nai-delete-preset" title="删除当前预设" aria-label="删除当前预设" ${state.novelaiPresetId === 'default' ? 'disabled' : ''}>${icon('trash-2')}</button></div>
     </div>`;
 }

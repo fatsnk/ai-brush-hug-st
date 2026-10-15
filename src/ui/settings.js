@@ -12,12 +12,14 @@ export const GENERATION_MODES = Object.freeze([
   { id: 'novelai', title: 'NovelAI', subtitle: '用以Api对接生图', icon: 'sparkles' },
   { id: 'comfyui', title: 'ComfyUI', subtitle: '本地工作流', icon: 'plug' },
   { id: 'openai', title: 'OpenAI兼容', subtitle: '通用图片接口', icon: 'image-plus' },
+  { id: 'sdwebui', title: 'SDWebUI', subtitle: 'Stable Diffusion 原生接口', icon: 'sliders-horizontal' },
 ]);
 
 export const SETTINGS_DEFAULTS = Object.freeze({
   ...CHAT_DEFAULTS,
   enabled: true,
   floatingBall: true,
+  externalAPI: true,
   provider: 'novelai',
   characterTheme: 'whale',
   generationMode: 'queue',
@@ -45,7 +47,7 @@ export const SETTING_LIMITS = {
 export function normalizeSettings(input = {}) {
   const source = input && typeof input === 'object' ? input : {};
   const result = { ...SETTINGS_DEFAULTS };
-  for (const key of ['enabled', 'floatingBall', 'auto', 'confirm', 'inline']) {
+  for (const key of ['enabled', 'floatingBall', 'auto', 'confirm', 'inline', 'externalAPI']) {
     if (typeof source[key] === 'boolean') result[key] = source[key];
   }
   const choices = {
@@ -92,6 +94,7 @@ export function renderSettings(state, additions = '') {
         <div class="activation-grid">
           ${switchRow('enabled', '插件开关', state.enabled)}
           ${switchRow('floatingBall', '显示悬浮球', state.floatingBall)}
+          ${switchRow('externalAPI', '允许其他扩展调用生图', state.externalAPI, '使用当前账号的接口与任务队列，调用记录显示来源扩展。')}
         </div>
         <div class="plugin-appearance-row">
           <label class="plugin-mode-select"><span>模式</span><select data-setting="provider" aria-label="模式">${GENERATION_MODES.map((mode) => `<option value="${mode.id}" ${state.provider === mode.id ? 'selected' : ''}>${mode.title}</option>`).join('')}</select></label>

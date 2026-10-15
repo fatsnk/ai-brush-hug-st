@@ -17,7 +17,7 @@ export function renderAssistant(state, ui) {
   const a = state.assistant;
   const plan = state.assistantDraft;
   const busy = ui.busy;
-  return `<div class="page-heading"><div><h1>提示词助手</h1><p>${state.provider === 'novelai' ? 'NovelAI' : state.provider === 'comfyui' ? 'ComfyUI' : 'OpenAI兼容'}</p></div>
+  return `<div class="page-heading"><div><h1>提示词助手</h1><p>${state.provider === 'novelai' ? 'NovelAI' : state.provider === 'comfyui' ? 'ComfyUI' : state.provider === 'sdwebui' ? 'SDWebUI' : 'OpenAI兼容'}</p></div>
     <span class="ui-status ${busy ? 'warning' : 'neutral'}" role="status">${icon(busy ? 'loader-circle' : 'sparkles', busy ? 'spin' : '')}${busy ? '正在处理' : '就绪'}</span></div>
     <div class="assistant-workspace">
       <section class="settings-band assistant-editor" aria-label="提示词编辑">

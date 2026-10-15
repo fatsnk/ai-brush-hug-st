@@ -1,0 +1,59 @@
+.profile-ai-dialog { width: min(1040px, calc(100vw - 28px)); max-width: none; max-height: calc(100dvh - 28px); margin: auto; padding: 0; border: 1px solid var(--border); border-radius: 8px; background: var(--surface, white); color: var(--text); box-shadow: 0 18px 70px #0003; font: inherit; overflow: hidden; }
+.profile-ai-dialog[open] { display: flex; flex-direction: column; }
+.profile-ai-dialog::backdrop { background: #18232166; }
+.profile-ai-dialog > header, .profile-ai-dialog > footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; flex: none; }
+.profile-ai-dialog > header { border-bottom: 1px solid var(--border); }
+.profile-ai-dialog h2, .profile-ai-dialog h3 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 16px; }
+.profile-ai-dialog h3 { font-size: 14px; }
+.profile-ai-dialog svg { width: 18px; height: 18px; flex: none; }
+.profile-ai-dialog header small { display: block; font-size: 12px; color: var(--muted); margin-top: 8px; overflow-wrap: anywhere; }
+.profile-ai-dialog header > div { min-width: 0; }
+.profile-ai-dialog > footer { border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+.profile-ai-dialog .assistant-actions { margin: 0; gap: 8px; }
+.profile-ai-body { min-height: 0; overflow: auto; padding: 16px 20px; overscroll-behavior: contain; }
+.profile-ai-dialog fieldset { min-width: 0; padding: 0; margin: 0; border: 0; }
+.profile-ai-dialog .ui-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; margin-bottom: 12px; font-size: 12px; }
+.profile-ai-dialog input:not([type="checkbox"]), .profile-ai-dialog textarea, .profile-ai-dialog select { min-width: 0; width: 100%; box-sizing: border-box; padding: 9px 10px; border: 1px solid var(--border); border-radius: 5px; background: var(--input, var(--surface, white)); color: var(--text); font: inherit; font-size: 13px; }
+.profile-ai-dialog textarea { resize: vertical; }
+.profile-ai-dialog input[type="checkbox"] { width: 16px; height: 16px; flex: none; accent-color: var(--accent); }
+.profile-ai-source-fields { margin-top: 16px !important; }
+.profile-ai-card-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; align-items: center; }
+.profile-ai-card-toolbar .search-input { flex: 1; min-width: 160px; }
+.profile-ai-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 20px; max-height: 380px; overflow-y: auto; }
+.profile-ai-card { display: flex; gap: 10px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border); cursor: pointer; min-width: 0; }
+.profile-ai-card > span { min-width: 0; }
+.profile-ai-card strong, .profile-ai-card code { display: block; overflow-wrap: anywhere; font-size: 13px; }
+.profile-ai-card small { color: var(--accent); font-size: 11px; margin-left: 8px; }
+.profile-ai-card code { margin-top: 6px; color: var(--muted); font-size: 11px; }
+.profile-ai-status { display: flex; align-items: center; gap: 8px; padding: 0 20px 12px; font-size: 12px; flex-wrap: wrap; }
+.profile-ai-status:empty { display: none; }
+.profile-ai-status .assistant-error { margin: 0; overflow-wrap: anywhere; }
+.profile-ai-preview { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 20px; align-items: start; }
+.profile-ai-candidates { position: sticky; top: 0; }
+.profile-ai-candidates > div { display: flex; align-items: center; gap: 6px; }
+.profile-ai-candidates button { flex: 1; min-width: 0; border: 0; border-left: 2px solid transparent; padding: 10px; background: none; color: var(--text); text-align: left; font: inherit; cursor: pointer; }
+.profile-ai-candidates button[aria-pressed="true"] { background: var(--soft); border-color: var(--accent); }
+.profile-ai-candidates strong, .profile-ai-candidates small { display: block; overflow-wrap: anywhere; }
+.profile-ai-candidates small { margin-top: 6px; font-size: 11px; color: var(--muted); }
+.profile-ai-draft { min-width: 0; }
+.profile-ai-link { min-width: 0; font-size: 12px; }
+.profile-ai-link code { display: block; overflow-wrap: anywhere; margin: 9px 0; }
+.profile-ai-evidence { border-block: 1px solid var(--border); padding: 10px 0; font-size: 12px; margin-bottom: 14px; }
+.profile-ai-evidence summary { cursor: pointer; }
+.profile-ai-dialog pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 6px 0; font: inherit; font-size: 12px; max-height: 240px; overflow: auto; }
+.profile-ai-review, .profile-ai-notes { font-size: 12px; color: var(--muted); line-height: 1.6; }
+.profile-ai-notes { padding-left: 20px; }
+.profile-ai-dialog .settings-band-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin: 16px 0 12px; }
+.profile-ai-diff { border-top: 1px solid var(--border); padding-top: 16px; margin-top: 16px; }
+.profile-ai-change { border-bottom: 1px solid var(--border); padding: 12px 0; font-size: 12px; }
+.profile-ai-change > label { display: flex; align-items: center; gap: 8px; }
+.profile-ai-change > div { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 12px; }
+.profile-ai-before { color: var(--muted); text-decoration: line-through; }
+@media (max-width: 700px) {
+  .profile-ai-dialog { width: calc(100vw - 12px); max-height: calc(100dvh - 12px); }
+  .profile-ai-dialog > header, .profile-ai-dialog > footer, .profile-ai-body { padding: 12px; }
+  .profile-ai-preview { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .profile-ai-candidates { position: static; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+  .profile-ai-cards { grid-template-columns: minmax(0, 1fr); max-height: 320px; }
+  .profile-ai-dialog .ui-button { padding: 8px 10px; }
+}

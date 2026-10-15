@@ -15,7 +15,7 @@ const check = (name, label, checked, disabled = false) => `<label class="backup-
 const input = (label, body) => `<label class="ui-field"><span>${label}</span>${body}</label>`;
 const options = (values, selected) => values.map(([id, title]) => `<option value="${id}" ${id === selected ? 'selected' : ''}>${title}</option>`).join('');
 const SELECT_LIBRARIES = [['novelaiPresets', 'NovelAI 预设'], ['openaiPresets', 'OpenAI 预设'],
-  ['comfyPresets', 'ComfyUI 工作流'], ['artistLibrary', '画师串'], ['profiles', '角色档案']];
+  ['comfyPresets', 'ComfyUI 工作流'], ['sdwebuiPresets', 'SDWebUI 预设'], ['artistLibrary', '画师串'], ['profiles', '角色档案']];
 
 export class BackupPanel {
   constructor({ getState, applyState, getLayout, applyLayout, importParameters, assets, library, ready, flush, active, reload, render, notify, tasks }) {
@@ -37,7 +37,7 @@ export class BackupPanel {
       <fieldset ${ui.busy ? 'disabled' : ''}>
         <div class="backup-controls">${input('导出类型', `<select data-backup-field="kind">${options([['config', '配置备份'], ['full', '完整备份'], ['share', '分享包']], ui.kind)}</select>`)}
           ${ui.kind === 'full' ? input('图片来源', `<select data-backup-field="location">${options([['', '当前存储位置'], ['browser', '浏览器'], ...(isInstalled() ? [['server', '酒馆服务器']] : [])], ui.location)}</select>`) : ''}</div>
-        <div class="backup-sections">${BACKUP_SECTIONS.filter(([id]) => !share || ['parameters', 'artists', 'characters'].includes(id)).map(([id, title]) =>
+        <div class="backup-sections">${BACKUP_SECTIONS.filter(([id]) => !share || ['parameters', 'artists', 'tags', 'characters'].includes(id)).map(([id, title]) =>
           check(`section:${id}`, title, ui.sections.has(id))).join('')}</div>
         ${share ? this.shareHTML(state) : `<div class="backup-secrets">${check('keys', '包含秘钥并加密整个备份', ui.keys)}
           ${ui.keys ? input('备份密码', `<input type="password" data-backup-field="password" value="${esc(ui.password)}" autocomplete="new-password" minlength="8" maxlength="1024" placeholder="至少 8 个字符" />`) : ''}</div>`}
@@ -58,6 +58,7 @@ export class BackupPanel {
       <dl class="backup-version"><div><dt>前端版本</dt><dd>${RELEASE.version}</dd></div><div><dt>服务器组件</dt><dd>${esc(ui.backend
         ? `${ui.backend.version} · ${ui.backend.protocol === RELEASE.storageProtocol ? '协议兼容' : '需同步更新'}` : '尚未检查')}</dd></div></dl>
       <div class="backup-actions">${command('refresh-cw', '检查版本', 'release', ui.busy)}
+        <button type="button" class="ui-button secondary" data-page="changelog">${icon('history')}更新日志</button>
         <a class="ui-button secondary" href="${RELEASE.url}" target="_blank" rel="noopener noreferrer">${icon('external-link')}安装仓库</a>
         <a class="ui-button secondary" href="${RELEASE.url}/releases" target="_blank" rel="noopener noreferrer">${icon('history')}发布与回退</a></div>
       ${ui.release ? `<p role="status">${esc(ui.release.message)}</p>${ui.release.notes ? `<pre class="backup-notes">${esc(ui.release.notes)}</pre>` : ''}` : ''}
@@ -194,7 +195,7 @@ export class BackupPanel {
     const ui = this.ui;
     await this.flush(); await this.ready();
     let state = cloneBackup(this.getState());
-    const sections = [...ui.sections].filter((id) => ui.kind !== 'share' || ['parameters', 'artists', 'characters'].includes(id));
+    const sections = [...ui.sections].filter((id) => ui.kind !== 'share' || ['parameters', 'artists', 'tags', 'characters'].includes(id));
     if (!sections.length) throw new Error('请至少选择一个配置分区');
     if (ui.kind === 'share') {
       const original = state; state = {};
@@ -203,7 +204,8 @@ export class BackupPanel {
         if (key === 'profiles') state.characterProfiles = { profiles: values };
         else state[key] = values;
       }
-      if (ui.shareCurrent) for (const key of ['novelai', 'openai', 'comfyui']) state[key] = original[key];
+      if (ui.shareCurrent) for (const key of ['novelai', 'openai', 'comfyui', 'sdwebui']) state[key] = original[key];
+      if (sections.includes('tags')) state.tagLibrary = original.tagLibrary;
     }
     if (ui.kind === 'full' && this.active()) throw new Error('请等待当前任务完成后导出完整备份');
     const source = ui.location || this.getState().cacheLocation;

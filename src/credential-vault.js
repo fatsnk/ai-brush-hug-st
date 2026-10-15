@@ -5,7 +5,7 @@ export function createCredentialVault({ account, storage, request }) {
   let mode;
   const cache = new Map();
   const secretName = 'api_key_generic';
-  const secretLabel = (provider) => `灵画师 · ${{ novelai: 'NovelAI', openai: 'OpenAI', comfyui: 'ComfyUI', assistant: '提示词助手' }[provider]}`;
+  const secretLabel = (provider) => `灵画师 · ${{ novelai: 'NovelAI', openai: 'OpenAI', comfyui: 'ComfyUI', sdwebui: 'SDWebUI', assistant: '提示词助手' }[provider]}`;
   const assertProvider = (provider) => {
     if (![...CONNECTION_PROVIDERS, 'assistant'].includes(provider)) throw new Error('未知接口类型');
   };

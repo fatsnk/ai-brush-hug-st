@@ -2,7 +2,7 @@ const number = (value, fallback, min = 0, max = 1) => Number.isFinite(Number(val
 const record = (value) => value && typeof value === 'object' && !Array.isArray(value);
 const base64OK = (value) => typeof value === 'string' && value.length > 0 && value.length <= 6 * 1024 * 1024 && /^[A-Za-z0-9+/]+={0,2}$/.test(value);
 const ENCODING_KEY = 'b36a8472fe418d9f80d6bb1c54e3a6e62c62936aa7bf31dae2bcf7e929f6430f';
-export const ADVANCED_MODES = [['text', '文生图'], ['reference', '参考生图'], ['image', '图生图'], ['inpaint', '局部重绘']];
+export const ADVANCED_MODES = [['text', '文生图'], ['reference', '参考生图'], ['image', '图生图'], ['inpaint', '局部重绘'], ['upscale', '图片放大']];
 export function assetReference(value) {
   if (!record(value) || !/^[a-f0-9]{64}$/.test(value.id) || !['browser', 'server'].includes(value.location)) return null;
   return { id: value.id, location: value.location, name: String(value.name || '参考素材').slice(0, 120),
@@ -60,6 +60,7 @@ export function modelCapabilities(provider, model, advanced = {}) {
     vibe: Boolean(vibeModelKey(model)), character: /^nai-diffusion-4-5-(full|curated)$/.test(model),
   };
   if (provider === 'comfyui') return { image: true, inpaint: true, vibe: false, character: false };
+  if (provider === 'sdwebui') return { image: true, inpaint: true, upscale: true, vibe: false, character: false };
   return { image: advanced.openAIEditEnabled === true && !/nai-diffusion/i.test(model),
     inpaint: advanced.openAIEditEnabled === true && !/nai-diffusion/i.test(model), vibe: false, character: false };
 }
@@ -67,7 +68,7 @@ export function validateAdvanced(snapshot) {
   const advanced = advancedOf(snapshot), params = snapshot.params || snapshot.config.params;
   const capabilities = modelCapabilities(snapshot.provider, params.model, advanced);
   if (advanced.mode === 'text') return advanced;
-  if (['image', 'inpaint'].includes(advanced.mode)) {
+  if (['image', 'inpaint', 'upscale'].includes(advanced.mode)) {
     if (!capabilities[advanced.mode]) throw new Error('当前模型或接口尚未启用此图片编辑能力');
     if (!advanced.source?.width || !advanced.source.height) throw new Error('请先上传或选择底图');
     if (snapshot.provider === 'novelai' && (params.width !== advanced.source.width || params.height !== advanced.source.height)) {

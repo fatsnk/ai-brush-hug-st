@@ -6,25 +6,30 @@ import { normalizeConnections, CONNECTION_PROVIDERS } from './connections.js';
 import { normalizeAssistant } from './prompt-assistant.js';
 import { normalizeArtistLibrary, ARTIST_LIBRARY_LIMIT } from './artist-library.js';
 import { normalizeProfileLibrary } from './character-profiles.js';
+import { normalizeTagLibrary, mergeTagLibraries, TAG_LIBRARY_BYTES, validateTagTemplates, validateTagMetadata } from './tag-library.js';
+import { normalizeWorkbench, normalizeReviews } from './prompt-workbench.js';
+import { normalizeVibeLibrary } from './vibe-library.js';
+import { normalizeSDWebUIState } from './ui/sdwebui.js';
 
 export const BACKUP_SECTIONS = Object.freeze([
   ['general', '插件设置与主题'], ['connections', '接口配置'], ['parameters', '参数预设与工作流'],
-  ['artists', '画师串库'], ['characters', '角色档案'], ['assistant', '提示词助手设置'],
+  ['artists', '画师串库'], ['tags', '中文标签库'], ['characters', '角色档案'], ['assistant', '提示词助手设置'],
 ]);
 export const CONFIG_KEYS = Object.freeze({
-  general: Object.keys(SETTINGS_DEFAULTS),
+  general: [...Object.keys(SETTINGS_DEFAULTS), 'drawingReviews'],
   connections: ['connections', 'connectionProfiles', 'connectionProfileIds', 'connectionLibraryVersion',
     'presetBindings', 'openaiEndpoint', 'openaiPath', 'openaiTimeout', 'comfyTimeout'],
   parameters: ['novelai', 'novelaiPresets', 'novelaiPresetId', 'openai', 'openaiPresets', 'openaiPresetId',
-    'comfyui', 'comfyPresets', 'comfyPresetId'],
+    'comfyui', 'comfyPresets', 'comfyPresetId', 'sdwebui', 'sdwebuiPresets', 'sdwebuiPresetId', 'workbench', 'vibeLibrary'],
   artists: ['artistLibrary', 'artistLibraryVersion'],
+  tags: ['tagLibrary'],
   characters: ['characterProfiles'],
   assistant: ['assistant', 'assistantDefaultsVersion'],
 });
 export const cloneBackup = (value) => JSON.parse(JSON.stringify(value));
 export const backupSize = (value) => new TextEncoder().encode(JSON.stringify(value)).length;
 const object = (value) => value && typeof value === 'object' && !Array.isArray(value);
-const libraries = ['novelaiPresets', 'openaiPresets', 'comfyPresets', 'artistLibrary'];
+const libraries = ['novelaiPresets', 'openaiPresets', 'comfyPresets', 'sdwebuiPresets', 'artistLibrary'];
 const secretField = /^(?:api[_-]?(?:key|token).*|authorization|password|access[_-]?token|headers|credentials|secret|client[_-]?secret|secret[_-]?key|bearer[_-]?token|token|__proto__|constructor|prototype)$/i;
 const keyPattern = /\b(?:sk-|pst-|STD-)[A-Za-z0-9_-]{12,}/g;
 
@@ -46,7 +51,7 @@ export function scrubBackup(value, { refs = false, sharing = false } = {}, depth
   if (!object(value)) return value;
   return Object.fromEntries(Object.entries(value).filter(([key]) => !secretField.test(key)
     && !(refs && /^(?:keyRef|openaiRef|assistantRef)$/.test(key))
-    && !(sharing && /^(?:chatBinding|chatKey|chatName|characterName|apiLink)$/.test(key)))
+    && !(sharing && /^(?:chatBinding|chatKey|chatName|characterName|apiLink|drawingReviews)$/.test(key)))
     .map(([key, item]) => {
       if (key === 'extra' && typeof item === 'string' && item.trim()) {
         let parsed;
@@ -69,10 +74,21 @@ export function normalizeBackupConfig(value = {}, sections = BACKUP_SECTIONS.map
   Object.assign(state, normalizeSettings(state));
   if (input.comfyui?.graph) parseWorkflow(JSON.stringify(input.comfyui.graph));
   for (const preset of input.comfyPresets || []) parseWorkflow(JSON.stringify(preset.config?.graph));
-  normalizeNovelAIState(state); normalizeOpenAIState(state); normalizeComfyState(state); normalizeConnections(state);
+  normalizeNovelAIState(state); normalizeOpenAIState(state); normalizeComfyState(state); normalizeSDWebUIState(state); normalizeConnections(state);
   state.assistant = normalizeAssistant(state.assistant);
   state.artistLibrary = normalizeArtistLibrary(state.artistLibrary);
   state.artistLibraryVersion = 1;
+  validateTagTemplates(input.tagLibrary?.templates);
+  validateTagMetadata(input.tagLibrary?.custom);
+  state.tagLibrary = normalizeTagLibrary(state.tagLibrary);
+  state.workbench = normalizeWorkbench(input.workbench);
+  state.drawingReviews = normalizeReviews(input.drawingReviews);
+  state.vibeLibrary = normalizeVibeLibrary(input.vibeLibrary);
+  assertLibrary(input.vibeLibrary, state.vibeLibrary, 'Vibe 素材库');
+  if (backupSize(state.vibeLibrary) > 300000) throw new Error('Vibe 素材库超过容量限制');
+  assertLibrary(input.tagLibrary?.custom, state.tagLibrary.custom, '中文标签库');
+  assertLibrary(input.tagLibrary?.templates, state.tagLibrary.templates, '提示词组合模板');
+  if (backupSize(state.tagLibrary) > TAG_LIBRARY_BYTES) throw new Error('中文标签库超过容量限制');
   state.characterProfiles = normalizeProfileLibrary(state.characterProfiles);
   state.assistantDefaultsVersion = 1;
   for (const key of libraries) assertLibrary(input[key], state[key], key);
@@ -94,7 +110,7 @@ export function credentialNodes(config) {
   for (const provider of CONNECTION_PROVIDERS) {
     if (config.connections?.[provider]) nodes.push({ provider, value: config.connections[provider] });
     for (const item of config.connectionProfiles?.[provider] || []) nodes.push({ provider, value: item.connection });
-    for (const item of config[{ novelai: 'novelaiPresets', openai: 'openaiPresets', comfyui: 'comfyPresets' }[provider]] || []) {
+    for (const item of config[{ novelai: 'novelaiPresets', openai: 'openaiPresets', comfyui: 'comfyPresets', sdwebui: 'sdwebuiPresets' }[provider]] || []) {
       if (item.connection) nodes.push({ provider, value: item.connection });
     }
   }
@@ -103,7 +119,7 @@ export function credentialNodes(config) {
 }
 
 const connectionSignature = (provider, value) => JSON.stringify([provider, String(value?.endpoint || '').trim().replace(/\/+$/, ''),
-  value?.auth || 'none', value?.path || '']);
+  value?.auth || 'none', value?.path || '', provider === 'sdwebui' ? value?.username || '' : '']);
 
 export async function portableCredentials(config, readKey, includeKeys) {
   const slots = new Map(), secrets = [];
@@ -192,7 +208,8 @@ export function mergeBackupConfig(current, imported, sections, mode = 'merge', p
       }
     }
     if (sections.includes('parameters')) {
-      for (const [provider, key, limit] of [['novelai', 'novelaiPresets', 50], ['openai', 'openaiPresets', 50], ['comfyui', 'comfyPresets', 10]]) {
+      next.vibeLibrary = combineRows(next.vibeLibrary, incoming.vibeLibrary, 100, new Map(), 80);
+      for (const [provider, key, limit] of [['novelai', 'novelaiPresets', 50], ['openai', 'openaiPresets', 50], ['comfyui', 'comfyPresets', 10], ['sdwebui', 'sdwebuiPresets', 50]]) {
         for (const item of incoming[key] || []) {
           if (item.connectionProfileId) {
             item.connectionProfileId = connectionMaps[provider]?.get(item.connectionProfileId)
@@ -202,7 +219,10 @@ export function mergeBackupConfig(current, imported, sections, mode = 'merge', p
         next[key] = combineRows(next[key], incoming[key], limit);
       }
     }
+    if (sections.includes('general')) next.drawingReviews = normalizeReviews({ ...incoming.drawingReviews, ...next.drawingReviews });
     if (sections.includes('artists')) next.artistLibrary = combineRows(next.artistLibrary, incoming.artistLibrary, 100);
+    if (sections.includes('tags')) next.tagLibrary = mergeTagLibraries(
+      normalizeTagLibrary(next.tagLibrary), normalizeTagLibrary(incoming.tagLibrary));
     if (sections.includes('characters')) {
       const mapping = new Map();
       next.characterProfiles.profiles = combineRows(next.characterProfiles.profiles, incoming.characterProfiles.profiles, 100, mapping, 120);
@@ -217,14 +237,14 @@ export function mergeBackupConfig(current, imported, sections, mode = 'merge', p
       }
     }
   } else throw new Error('请选择合并导入或覆盖配置');
-  for (const key of ['novelaiPresets', 'openaiPresets', 'comfyPresets']) {
+  for (const key of ['novelaiPresets', 'openaiPresets', 'comfyPresets', 'sdwebuiPresets']) {
     for (const item of next[key] || []) if (item.connectionProfileId) {
-      const provider = { novelaiPresets: 'novelai', openaiPresets: 'openai', comfyPresets: 'comfyui' }[key];
+      const provider = { novelaiPresets: 'novelai', openaiPresets: 'openai', comfyPresets: 'comfyui', sdwebuiPresets: 'sdwebui' }[key];
       if (!next.connectionProfiles[provider].some((entry) => entry.id === item.connectionProfileId)) item.connectionProfileId = '';
     }
   }
   const normalized = normalizeBackupConfig(next);
-  for (const key of ['novelaiPresets', 'openaiPresets', 'comfyPresets']) assertLibrary(next[key], normalized[key], key);
+  for (const key of ['novelaiPresets', 'openaiPresets', 'comfyPresets', 'sdwebuiPresets']) assertLibrary(next[key], normalized[key], key);
   if (backupSize({ ...next, ...normalized }) > 2000000) throw new Error('恢复后的配置超过 2 MB');
   return { ...next, ...normalized };
 }

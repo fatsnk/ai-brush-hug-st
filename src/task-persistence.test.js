@@ -34,6 +34,32 @@ function fixture() {
   const persistence = () => new TaskPersistence({ request, settings: () => settings, readKey: async () => 'secret' });
   return { request, persistence, advance: () => { time += LEASE_MS + 1; } };
 }
+test('explicit insufficient-credit response is rejected without becoming uncertain or eligible for automatic resubmission', async () => {
+  const f = fixture(), persistence = f.persistence(), current = plan(), record = await persistence.create(current);
+  let posts = 0;
+  const queue = new GenerationQueue({ settings: () => settings, persistence,
+    run: (job) => submitGeneration(job, async () => { posts++; return new Response('', { status: 402 }); }) });
+  const job = queue.add(current, { id: record.id });
+  await eventually(() => job.status === 'failed' && queue.running === 0);
+  const row = (await persistence.list()).rows[0];
+  assert.equal(row.status, 'failed'); assert.equal(row.stage, 'rejected');
+  assert.match(row.error, /余额|Anlas/); assert.equal(posts, 1);
+  queue.pump(); assert.equal(posts, 1);
+});
+
+test('batch metadata and frozen prompts restore paused without triggering generation', async () => {
+  const f = fixture(), persistence = f.persistence(), current = plan();
+  current.snapshot.experiment = { id: crypto.randomUUID(), mode: 'batch', label: 'A / ink', index: 0, createdAt: Date.now() };
+  const record = await persistence.create(current);
+  current.snapshot.params.positive = 'edited after save';
+  const rows = (await persistence.list()).rows;
+  const queue = new GenerationQueue({ settings: () => settings, persistence, run: async () => { assert.fail('restoration must not generate'); } });
+  queue.restore(rows);
+  assert.equal(queue.jobs[0].status, 'paused');
+  assert.equal(queue.jobs[0].plan.snapshot.params.positive, 'garden');
+  assert.equal(queue.jobs[0].plan.snapshot.experiment.label, 'A / ink');
+  assert.equal(rows[0].id, record.id);
+});
 
 test('accepted image response restores in a fresh queue and recovery does not POST again', async () => {
   const f = fixture(), first = f.persistence();

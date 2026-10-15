@@ -2,7 +2,7 @@ import { escapeHtml as esc } from '../config.js';
 import { icon } from '../icons.js';
 const command = (name, title, action, extra = '') => `<button type="button" class="ui-button secondary" data-action="${action}" ${extra}>${icon(name)}<span>${title}</span></button>`;
 const field = (label, content) => `<label class="ui-field"><span>${label}</span>${content}</label>`;
-const targets = { all: '通用', novelai: 'NovelAI', openai: 'OpenAI兼容', comfyui: 'ComfyUI' };
+const targets = { all: '通用', novelai: 'NovelAI', openai: 'OpenAI兼容', comfyui: 'ComfyUI', sdwebui: 'SDWebUI' };
 
 export function renderArtists(state, ui) {
   const query = ui.search.trim().toLocaleLowerCase();

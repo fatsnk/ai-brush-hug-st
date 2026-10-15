@@ -1,4 +1,5 @@
 import { createTaskLedger, frozenPlan, CHUNK_SIZE } from '../server/linghuashi-storage/task-ledger.mjs';
+import { sdwebuiHeaders } from './sdwebui.js';
 
 const toBase64 = (bytes) => {
   let text = ''; for (const byte of bytes) text += String.fromCharCode(byte);
@@ -60,8 +61,7 @@ export class TaskPersistence {
     this.owner = crypto.randomUUID();
   }
   list() { return this.request('task/list'); }
-  async create(plan) {
-    const id = crypto.randomUUID();
+  async create(plan, id = crypto.randomUUID()) {
     return this.request('task/create', { id, plan: frozenPlan(plan) });
   }
   async claim(job) {
@@ -83,7 +83,7 @@ export class TaskPersistence {
         const key = await this.readKey(job.plan.provider, job.plan.keyRef);
         if (!key) throw new Error();
         activeKey = key.trim();
-        job.plan.headers.Authorization = `Bearer ${key.trim()}`;
+        Object.assign(job.plan.headers, job.plan.provider === 'sdwebui' ? sdwebuiHeaders(job.plan, key) : { Authorization: `Bearer ${key.trim()}` });
       } catch { throw new Error('原任务的秘钥无法读取，请在原设备恢复该秘钥；任务参数已保留'); }
     }
     if (job.plan.provider === 'openai' && job.plan.identityFields.length === 3) {
@@ -139,7 +139,7 @@ export class TaskPersistence {
     const result = await this.update(job, {
       status: job.status, savedIds: job.savedIds || [],
       error: job.error || '', cooldown: error?.cooldown || 0,
-      rejected: [400, 401, 403, 404, 413, 429].includes(error?.status),
+      rejected: [400, 401, 402, 403, 404, 413, 422, 429].includes(error?.status),
     });
     job.status = result.status;
     job.error = result.error;

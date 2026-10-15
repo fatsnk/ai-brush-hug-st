@@ -8,7 +8,7 @@ export function normalizeArtist(value = {}) {
     name: text(value.name, 40).trim(), category: text(value.category, 40).trim(),
     artist: text(value.artist ?? value.tags, 4000), quality: text(value.quality, 4000),
     negative: text(value.negative, 12000), favorite: value.favorite === true,
-    target: ['all', 'novelai', 'openai', 'comfyui'].includes(value.target) ? value.target : 'all',
+    target: ['all', 'novelai', 'openai', 'comfyui', 'sdwebui'].includes(value.target) ? value.target : 'all',
     preview: typeof value.preview === 'string' && value.preview.length <= 60000
       && /^data:image\/(?:webp|png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(value.preview) ? value.preview : '',
   };
@@ -76,7 +76,7 @@ export function applyArtist(state, value, { mode = 'replace', quality = false, n
   const entry = normalizeArtist(value), provider = state.provider;
   if (!entry.artist.trim()) throw new Error('请先填写画师串／风格描述');
   if (entry.target !== 'all' && entry.target !== provider) throw new Error('该画师串不适用于当前生图模式，请先切换模式');
-  const params = structuredClone(provider === 'novelai' ? state.novelai : provider === 'openai' ? state.openai : state.comfyui.params);
+  const params = structuredClone(provider === 'comfyui' ? state.comfyui.params : state[provider]);
   const artistKey = provider === 'comfyui' ? 'positive' : 'artist';
   if (provider === 'comfyui' && !state.comfyui.mapping.positive) throw new Error('请先映射 ComfyUI 正向提示词节点');
   // ComfyUI has one positive field; retain its subject and scene when adding style.
@@ -89,8 +89,7 @@ export function applyArtist(state, value, { mode = 'replace', quality = false, n
   }
   const maxPositive = provider === 'openai' ? 32000 : 12000;
   if ((params.artist || '').length > 4000 || params.positive.length > maxPositive || params.negative.length > maxPositive) throw new Error('合并后的提示词超出长度限制，请先精简');
-  if (provider === 'novelai') state.novelai = params;
-  else if (provider === 'openai') state.openai = params;
+  if (provider !== 'comfyui') state[provider] = params;
   else state.comfyui.params = params;
   return params;
 }

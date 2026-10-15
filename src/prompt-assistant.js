@@ -95,7 +95,7 @@ export function assistantModelNames(data) {
 
 export function promptFormat(provider, model, choice = 'auto') {
   if (choice !== 'auto') return choice;
-  return provider === 'novelai' || /nai-diffusion/i.test(model || '') || provider === 'comfyui' ? 'tags' : 'natural';
+  return provider === 'novelai' || /nai-diffusion/i.test(model || '') || ['comfyui', 'sdwebui'].includes(provider) ? 'tags' : 'natural';
 }
 
 export function buildAssistantMessages({ settings, operation = 'generate', input = '', context = {}, target = {} }) {
@@ -166,7 +166,7 @@ export function parseAssistantResult(raw, { stored = false } = {}) {
   };
 }
 
-export async function requestAssistantAPI(settings, key, messages, { signal, fetcher = fetch } = {}) {
+export async function requestAssistantText(settings, key, messages, { signal, fetcher = fetch } = {}) {
   const options = normalizeAssistant(settings);
   if (!options.model.trim()) throw new Error('请填写提示词助手的文字模型');
   if (!key.trim()) throw new Error('请填写提示词助手的 API Key');
@@ -182,8 +182,15 @@ export async function requestAssistantAPI(settings, key, messages, { signal, fet
   }
   const data = await response.json();
   const content = data.choices?.[0]?.message?.content;
-  return parseAssistantResult(typeof content === 'string' ? content : Array.isArray(content)
-    ? content.filter((part) => part.type === 'text').map((part) => part.text).join('') : '');
+  const raw = typeof content === 'string' ? content : Array.isArray(content)
+    ? content.filter((part) => part.type === 'text').map((part) => part.text).join('') : '';
+  if (!raw.trim() || raw.length > 100000) throw new Error('文字模型没有返回有效结果');
+  signal?.throwIfAborted();
+  return raw;
+}
+
+export async function requestAssistantAPI(settings, key, messages, options) {
+  return parseAssistantResult(await requestAssistantText(settings, key, messages, options));
 }
 
 export function applyAssistantPlan(snapshot, plan, settings) {
@@ -208,6 +215,7 @@ export function applyAssistantPlan(snapshot, plan, settings) {
   if (params.positive.length > 32000 || params.negative.length > 32000) throw new Error('合并后的提示词超过 32000 字符');
   if (result.provider === 'novelai') params.nSamples = options.count;
   else if (result.provider === 'openai') params.n = options.count;
+  else if (result.provider === 'sdwebui') params.batch = options.count;
   else {
     if (!result.config.mapping.positive) throw new Error('请先映射 ComfyUI 的正向提示词节点');
     if (options.count > 1 && !result.config.mapping.batchSize) throw new Error('多张配图需要映射 ComfyUI 批次数量节点');

@@ -5,6 +5,7 @@ import { applyCharacterScene } from './character-profiles.js';
 export function imageEditDraft(snapshot) {
   const draft = normalizeSnapshot(snapshot && { ...snapshot, partial: false });
   if (!draft) throw new Error('图片没有可编辑的生成参数，请先导入参数记录');
+  delete draft.novelaiProcessing;
   const params = draft.params || draft.config.params;
   if (snapshot.partial && !Object.hasOwn(snapshot.params || {}, 'positive')) params.positive = '';
   if (draft.characterScene?.applied) {
@@ -19,8 +20,9 @@ export function imageEditDraft(snapshot) {
 
 export function prepareImageEdit(draft) {
   const result = normalizeSnapshot(draft);
+  delete result.novelaiProcessing;
   const params = result.params || result.config.params;
-  if (!params.positive.trim()) throw new Error('请填写正向提示词');
+  if (!params.positive.trim() && !(result.provider === 'sdwebui' && params.advanced?.mode === 'upscale')) throw new Error('请填写正向提示词');
   if (result.provider === 'comfyui' && !result.config.mapping.positive) throw new Error('原工作流没有映射正向提示词，请先在接口配置完善工作流');
   if (result.characterScene?.applied) {
     result.characterScene.basePositive = params.positive;

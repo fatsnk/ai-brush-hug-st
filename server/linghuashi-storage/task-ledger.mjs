@@ -37,7 +37,7 @@ function safeValue(value, depth = 0) {
 }
 
 export function frozenPlan(plan) {
-  if (!object(plan) || !['novelai', 'openai', 'comfyui'].includes(plan.provider)
+  if (!object(plan) || !['novelai', 'openai', 'comfyui', 'sdwebui'].includes(plan.provider)
     || !object(plan.snapshot) || !object(plan.body)) throw fail('任务参数无效', 400);
   const url = new URL(plan.url);
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password
@@ -51,6 +51,12 @@ export function frozenPlan(plan) {
     timeout: Math.max(5, Math.min(600, Number(plan.timeout) || 600)),
     storageLocation: plan.storageLocation === 'server' ? 'server' : 'browser',
     keyRef: /^(?:tavern|browser):[a-f0-9-]{36}$/.test(plan.keyRef || '') ? plan.keyRef : '',
+    ...(plan.provider === 'sdwebui' ? {
+      auth: ['basic', 'bearer'].includes(plan.auth) ? plan.auth : 'none',
+      username: String(plan.username || '').slice(0, 200),
+      sdTaskIdSupported: plan.sdTaskIdSupported === true,
+      sdProgressMode: ['internal', 'native'].includes(plan.sdProgressMode) ? plan.sdProgressMode : 'none',
+    } : {}),
     identityFields: Array.isArray(plan.identityFields) && plan.identityFields.length === 3
       ? plan.identityFields.map((item) => String(item).slice(0, 512)) : [],
     chatRequestId: plan.chatRequestId || '', chatBinding: plan.chatBinding ? safeValue(plan.chatBinding) : null,

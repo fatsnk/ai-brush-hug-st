@@ -199,6 +199,23 @@ test('queue cancellation and interval are applied after completion', async () =>
   assert(starts[1] - starts[0] >= 45);
   assert(!JSON.stringify(queue.records()).includes('test-secret'));
 });
+test('deferred batch does not start until committed; pause leaves running task and resumes only waiting jobs', async () => {
+  let release;
+  const started = [];
+  const queue = new GenerationQueue({ settings: () => ({ enabled: true, generationMode: 'queue', queueInterval: 0 }),
+    run: async (job) => { started.push(job.id); if (started.length === 1) await new Promise((resolve) => { release = resolve; }); } });
+  const batch = () => ({ ...plan(), snapshot: { experiment: { id: 'batch-a' } } });
+  const first = queue.add(batch(), { defer: true }), second = queue.add(batch(), { defer: true });
+  assert.equal(started.length, 0);
+  queue.pump();
+  assert.equal(first.status, 'running');
+  queue.pauseBatch('batch-a');
+  assert.equal(second.status, 'paused'); assert.equal(first.status, 'running');
+  release(); await eventually(() => first.status === 'completed');
+  assert.equal(started.length, 1);
+  queue.resumeBatch('batch-a'); await eventually(() => second.status === 'completed');
+  assert.equal(started.length, 2);
+});
 
 test('parallel limit and active cancellation free slots only when runner stops', async () => {
   let active = 0, peak = 0;

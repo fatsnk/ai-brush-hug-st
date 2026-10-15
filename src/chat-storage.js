@@ -1,5 +1,5 @@
 import { serverDrawing } from './server-storage.js';
-import { currentDrawing } from '../server/linghuashi-storage/image-versions.mjs';
+import { currentDrawing, groupVersions, selectVersion } from '../server/linghuashi-storage/image-versions.mjs';
 
 const requestResult = (request) => new Promise((resolve, reject) => {
   request.onsuccess = () => resolve(request.result);
@@ -41,12 +41,35 @@ export async function openChatStore(account, { mode = () => 'browser', request: 
     image: async (id) => currentDrawing(await requestResult(db.transaction('drawings', 'readonly').objectStore('drawings').getAll()), id),
     close: () => db.close(),
   };
+  const changeImages = (change) => new Promise((resolve, reject) => {
+    const transaction = db.transaction('drawings', 'readwrite'), store = transaction.objectStore('drawings');
+    const read = store.getAll();
+    let failure;
+    read.onsuccess = () => {
+      try { change(read.result).forEach((row) => store.put(row)); }
+      catch (error) { failure = error; transaction.abort(); }
+    };
+    transaction.oncomplete = resolve;
+    transaction.onabort = () => reject(failure || transaction.error || new Error('图片记录保存失败'));
+    transaction.onerror = () => {};
+  });
   const locations = new Map();
   const records = new Map();
   const serverImages = new Set();
   let syncedChat;
   let syncedRecords = new Map();
   let taskRecords = new Map();
+  let allTasks = [];
+  let browserRows;
+  let serverRows;
+  const imageRows = (location) => {
+    if (location === 'server' && serverRequest) {
+      serverRows ||= serverRequest('list').then((result) => result.rows.map((row) => serverDrawing(row, account)));
+      return serverRows;
+    }
+    browserRows ||= requestResult(db.transaction('drawings', 'readonly').objectStore('drawings').getAll());
+    return browserRows;
+  };
   const withTask = (row, id) => {
     const task = taskRecords.get(id);
     if (!task || row && row.requestId !== task.plan.chatRequestId && row.updatedAt > task.createdAt) return row;
@@ -68,11 +91,13 @@ export async function openChatStore(account, { mode = () => 'browser', request: 
   };
   return {
     async sync(chatKey) {
+      browserRows = null; serverRows = null;
       if (serverRequest && chatKey) {
         const tasks = await serverRequest('task/list');
-        taskRecords = new Map(tasks.rows.filter((task) => task.plan.chatBinding?.chatKey === chatKey)
+        allTasks = tasks.rows.filter((task) => task.plan.chatBinding?.chatKey === chatKey);
+        taskRecords = new Map(allTasks
           .filter((task) => !task.plan.imageEdit).map((task) => [task.plan.chatBinding.id, task]));
-      }
+      } else { allTasks = []; taskRecords.clear(); }
       if (mode() !== 'server' || !serverRequest || !chatKey) { syncedChat = null; return; }
       const rows = await serverRequest('chat/list', { chatKey });
       syncedChat = chatKey;
@@ -102,12 +127,32 @@ export async function openChatStore(account, { mode = () => 'browser', request: 
       if (row && location === 'server') syncedRecords.set(id, row);
       return remember(row, location);
     },
-    async image(id) {
-      if (serverImages.has(id) && serverRequest) {
-        const row = await serverRequest('image/get', { id, current: true });
-        return row ? serverDrawing(row, account) : null;
-      }
-      return local.image(id);
+    async image(id, location = serverImages.has(id) ? 'server' : 'browser') {
+      const row = currentDrawing(await imageRows(location), id);
+      return row ? { ...row, storageLocation: location } : null;
+    },
+    async versions(id, location) {
+      return groupVersions(await imageRows(location), id).map((row) => ({ ...row, storageLocation: location }));
+    },
+    imageTask(bindingId, groupId, location) {
+      return allTasks.filter((task) => task.plan.chatBinding?.id === bindingId && task.plan.imageEdit?.groupId === groupId
+        && task.plan.storageLocation === location).sort((a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id))[0];
+    },
+    hasImageRequest(bindingId, requestId) {
+      return allTasks.some((task) => task.plan.chatBinding?.id === bindingId && task.plan.imageEdit && task.plan.chatRequestId === requestId);
+    },
+    async favorite(id, favorite, location) {
+      if (location === 'server') await serverRequest('favorite', { id, favorite });
+      else await changeImages((rows) => {
+        if (!rows.some((row) => row.id === id)) throw new Error('图片已经删除，请刷新聊天');
+        return rows.map((row) => row.id === id ? { ...row, favorite } : row);
+      });
+      browserRows = null; serverRows = null;
+    },
+    async selectVersion(id, location) {
+      if (location === 'server') await serverRequest('version/select', { id });
+      else await changeImages((rows) => selectVersion(rows, id));
+      browserRows = null; serverRows = null;
     },
     close: local.close,
   };

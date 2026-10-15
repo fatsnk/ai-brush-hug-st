@@ -1,5 +1,6 @@
 import { advancedOf, validateAdvanced, applyNovelAIAdvanced } from './advanced-generation.js';
 import { assetBase64 } from './reference-assets.js';
+import { normalizeProcessing, buildProcessingRequest } from './novelai-processing.js';
 
 async function imageCanvas(blob) {
   const bitmap = await createImageBitmap(blob);
@@ -61,7 +62,20 @@ export async function compositeUnmasked(resultBlob, sourceBlob, maskBlob) {
 }
 
 export async function prepareAdvancedPayload(job, assets, fetcher = fetch) {
-  const plan = job.plan, advanced = validateAdvanced(plan.snapshot);
+  const plan = job.plan;
+  if (plan.snapshot.novelaiProcessing) {
+    const processing = normalizeProcessing(plan.snapshot.novelaiProcessing);
+    if (!processing) throw new Error('处理底图记录无效，请重新打开原图');
+    const body = buildProcessingRequest(plan.snapshot).body;
+    job.controller.signal.throwIfAborted();
+    const blob = await assets.get(processing.source);
+    job.controller.signal.throwIfAborted();
+    const image = assetBase64(new Uint8Array(await blob.arrayBuffer()));
+    if (processing.kind === 'enhance') body.parameters.image = image;
+    else body.image = image;
+    return body;
+  }
+  const advanced = validateAdvanced(plan.snapshot);
   if (advanced.mode === 'text') return plan.body;
   job.phase = 'preparing'; job.notify?.();
   const read = async (asset) => {
@@ -89,6 +103,16 @@ export async function prepareAdvancedPayload(job, assets, fetcher = fetch) {
     if (advanced.mode === 'inpaint') form.append('mask', await transparentEditMask(await read(advanced.mask)), 'mask.png');
     return form;
   }
+  if (plan.provider === 'sdwebui') {
+    const body = structuredClone(plan.body);
+    const source = assetBase64(new Uint8Array(await (await read(advanced.source)).arrayBuffer()));
+    if (advanced.mode === 'upscale') body.image = source;
+    else {
+      body.init_images = [source];
+      if (advanced.mode === 'inpaint') body.mask = assetBase64(new Uint8Array(await (await read(advanced.mask)).arrayBuffer()));
+    }
+    return body;
+  }
   const body = structuredClone(plan.body), config = plan.snapshot.config;
   let source = await read(advanced.source);
   if (advanced.mode === 'inpaint') source = await maskedComfySource(source, await read(advanced.mask));
@@ -113,6 +137,7 @@ export async function prepareAdvancedPayload(job, assets, fetcher = fetch) {
 }
 
 export async function finishAdvancedImages(job, images, assets) {
+  if (job.plan.snapshot.novelaiProcessing) return images;
   const advanced = advancedOf(job.plan.snapshot);
   if (advanced.mode !== 'inpaint' || !advanced.keepOutside) return images;
   const source = await assets.get(advanced.source), mask = await assets.get(advanced.mask);
