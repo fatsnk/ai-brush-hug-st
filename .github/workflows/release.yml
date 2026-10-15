@@ -24,7 +24,8 @@ jobs:
                   allowed = {"src", "server", "scripts", "docs", "examples", "dist", ".release-artifacts",
                       "manifest.json", "extension.manifest.json", "package.json", "package-lock.json",
                       "vite.config.js", "vite.extension.config.js", "index.html", "preview.html",
-                      "extension-ui.html", "README.md", "CHANGELOG.md", ".gitignore"}
+                      "extension-ui.html", "README.md", "CHANGELOG.md", "LICENSE",
+                      "qq-group-1076122953.png", ".gitignore"}
                   if name.parts[0] not in allowed:
                       raise RuntimeError("Unexpected package path")
                   target = root.joinpath(*name.parts)
@@ -50,7 +51,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src server scripts docs examples manifest.json extension.manifest.json dist package.json package-lock.json \
-            vite.config.js vite.extension.config.js index.html preview.html extension-ui.html README.md CHANGELOG.md .gitignore
+            vite.config.js vite.extension.config.js index.html preview.html extension-ui.html README.md CHANGELOG.md LICENSE \
+            qq-group-1076122953.png .gitignore
           if [ -f release-import.zip ]; then
             git rm release-import.zip
           fi
