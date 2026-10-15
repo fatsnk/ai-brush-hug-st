@@ -5,7 +5,7 @@
   "optional": [],
   "dependencies": [],
   "js": "dist/index.js?ver=0.21.4&build=20261016-theme-updates-r1",
-  "author": "灵画师",
+  "author": "小波",
   "version": "0.21.4",
   "auto_update": false,
   "minimum_client_version": "1.12.13"

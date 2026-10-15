@@ -1,6 +1,8 @@
 {
   "name": "ai-brush-hug-st",
   "version": "0.21.4",
+  "author": "小波",
+  "license": "BSD-2-Clause",
   "private": true,
   "type": "module",
   "scripts": {
@@ -28,6 +30,9 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/ibome/ai-brush-hug-st.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ibome/ai-brush-hug-st/issues"
   },
   "dependencies": {
     "jszip": "3.10.1",

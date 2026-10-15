@@ -2,6 +2,8 @@
 
 一款对萌新友好的生图扩展插件，愿世间充满和平友爱~
 
+**作者：小波** · **许可：[BSD 2-Clause](LICENSE)**
+
 **当前前端版本：0.21.4** · **服务器组件：0.21.0，存储协议 2**
 
 灵画师是 SillyTavern 的图片生成扩展。可以在生图工坊手动绘图，也可以识别聊天里的提示词，在原位置显示图片；支持 NovelAI、OpenAI 兼容、ComfyUI、SDWebUI 四种模式，以及角色档案、提示词编辑、图片历史版本和九套人物主题。
@@ -87,16 +89,16 @@ https://github.com/ibome/ai-brush-hug-st
 - [完整更新日志](CHANGELOG.md)：逐版本记录。
 - [Releases](https://github.com/ibome/ai-brush-hug-st/releases)：安装包与 SHA256 校验文件。
 
-## 开发
+## 交流与反馈
 
-```sh
-npm ci
-npm test
-npm run dev
-npm run build:extension
-npm run package:release
-```
+**NovelAi&ComfyUI\*灵画师交流群**
 
-前端源码位于 `src/`，服务器组件位于 `server/linghuashi-storage/`，教程位于 `docs/`。发布产物生成到 `.release-artifacts/`，包含可安装前端包、独立服务器组件包、校验文件及源码导入包。打包读取明确列出的文件并检查凭据和部署信息，账号数据不进入分发包。
+QQ 群号：**1076122953**，也可以扫描下方二维码加入。
 
-功能流程参考同类扩展，使用灵画师自身结构实现。
+<img src="qq-group-1076122953.png" alt="NovelAi&amp;ComfyUI*灵画师交流群二维码，群号 1076122953" width="280">
+
+遇到问题或有功能建议，可以前往 [GitHub Issues](https://github.com/ibome/ai-brush-hug-st/issues) 反馈。请附上插件版本、使用的接口模式、复现步骤及相关截图，截图和日志请遮住秘钥等私人信息。
+
+## 许可协议
+
+本项目采用 [BSD 2-Clause 许可证](LICENSE)。Copyright (c) 2026 小波。
