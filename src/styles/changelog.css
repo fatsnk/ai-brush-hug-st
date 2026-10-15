@@ -1,4 +1,13 @@
 .changelog-page { min-width: 0; }
+.release-band { margin-bottom: 24px; }
+.release-announcement { display: flex; align-items: center; gap: 16px; padding-block: 10px; }
+.release-announcement > img { width: 128px; height: 128px; object-fit: contain; flex-shrink: 0; }
+.release-announcement > div { min-width: 0; }
+.release-announcement strong { display: block; font-size: 21px; line-height: 1.4; color: var(--accent); }
+.release-announcement p { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: var(--muted); font-size: 13px; }
+.release-announcement p svg { width: 15px; height: 15px; }
+.release-status { font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.release-error { color: var(--danger); }
 .changelog-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
 .changelog-entries { border-bottom: 1px solid var(--border); }
 .changelog-entry { border-top: 1px solid var(--border); }
@@ -18,6 +27,9 @@
 .changelog-entry li::marker { color: var(--accent); }
 .changelog-entry code { padding: 1px 4px; border-radius: 3px; background: var(--soft); font-size: .95em; white-space: normal; }
 @media (max-width: 420px) {
+  .release-announcement { gap: 10px; }
+  .release-announcement > img { width: 96px; height: 112px; }
+  .release-announcement strong { font-size: 19px; }
   .changelog-entry > summary { gap: 8px; padding-inline: 5px; }
   .changelog-entry > ul { padding-left: 22px; padding-right: 5px; }
 }

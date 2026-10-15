@@ -11,6 +11,8 @@ import { createAssistantHost } from './assistant-host.js';
 import { chatIdentity } from './chat.js';
 import { RELEASE } from './release.js';
 import { createReleaseMonitor, RELEASE_CACHE_KEY } from './release-monitor.js';
+import { createExtensionUpdater } from './extension-update.js';
+import { createUpdateNotice } from './ui/update-notice.js';
 import { createExtensionAPI, apiError } from './extension-api.js';
 
 const VERSION = RELEASE.version;
@@ -67,6 +69,9 @@ async function start() {
   let resolveFrame;
   let rejectFrame;
   let textGenerating = Boolean(context.streamingProcessor && !context.streamingProcessor.isFinished && !context.streamingProcessor.isStopped);
+  let extensionUpdateResult;
+  const extensionUpdater = createExtensionUpdater({ moduleURL: import.meta.url,
+    getHeaders: () => getContext()?.getRequestHeaders?.(), isBusy: () => textGenerating });
   const assistantHost = createAssistantHost({ getContext, settings: () => ui.assistant,
     post, isBusy: () => textGenerating });
   const textStarted = (type, _options, dryRun) => {
@@ -148,6 +153,11 @@ async function start() {
       if (openButton.getClientRects().length) openButton.focus({ preventScroll: true });
     },
   });
+  const updateNotice = createUpdateNotice({ container: shadow, storage: localStorage, account, onOpen: () => open('updates') });
+  function updateReleaseAppearance() {
+    updateNotice.update({ release: releaseMonitor.getState().release, characterTheme: ui.characterTheme,
+      theme: layout.theme, hidden: !backdrop.hidden || ui.enabled === false || Boolean(extensionUpdateResult) });
+  }
 
   const entry = document.createElement('div');
   entry.id = 'linghuashi-settings-entry';
@@ -175,6 +185,7 @@ async function start() {
     updateBadge.textContent = newer ? `有更新 v${value.release.version}` : '';
     openButton.setAttribute('aria-label', newer ? `打开灵画师控制台，有更新 v${value.release.version}` : '打开灵画师控制台');
     openButton.title = newer ? `当前 v${VERSION}，新版本 v${value.release.version}，点击查看更新` : `灵画师 v${VERSION}`;
+    updateReleaseAppearance();
     post('linghuashi:release-state', { value });
   }
   const unsubscribeRelease = releaseMonitor.subscribe(showReleaseState);
@@ -213,6 +224,7 @@ async function start() {
     paintIcons(shadow);
     positionBall();
     floatingMenu.update({ characterTheme: theme, theme: layout.theme });
+    updateReleaseAppearance();
   }
 
   function positionBall() {
@@ -286,6 +298,25 @@ async function start() {
     if (data.type === 'linghuashi:extension-manager') {
       const manager = document.getElementById('extensions_details');
       if (manager) { close(); manager.click(); }
+      return;
+    }
+    if (data.type === 'linghuashi:update' && typeof data.requestId === 'string' && data.requestId.length <= 64) {
+      const latest = releaseMonitor.getState().release;
+      if (!latest?.newer || data.version !== latest.version) {
+        post('linghuashi:update-result', { requestId: data.requestId, error: '版本状态已变化，请重新检查版本' });
+        return;
+      }
+      void (extensionUpdateResult ? Promise.resolve(extensionUpdateResult) : extensionUpdater.update(latest.version)).then(
+        (value) => {
+          extensionUpdateResult = value; updateNotice.dismiss(); updateReleaseAppearance();
+          post('linghuashi:update-result', { requestId: data.requestId, value });
+        },
+        (error) => post('linghuashi:update-result', { requestId: data.requestId, error: error.message }),
+      );
+      return;
+    }
+    if (data.type === 'linghuashi:update-reload') {
+      if (extensionUpdateResult?.reloadRequired && !textGenerating) location.reload();
       return;
     }
     if (data.type === 'linghuashi:extension-response' || data.type === 'linghuashi:extension-task') {
@@ -384,6 +415,7 @@ async function start() {
     window.removeEventListener('storage', releaseCacheChanged);
     document.removeEventListener('visibilitychange', checkForUpdates);
     floatingMenu.destroy();
+    updateNotice.destroy();
     chatLink?.destroy();
     assistantHost.destroy();
     extensionAPI.destroy();

@@ -1,6 +1,6 @@
 export const RELEASE = Object.freeze({
-  version: '0.21.3',
-  build: '20261016-update-notice-r1',
+  version: '0.21.4',
+  build: '20261016-theme-updates-r1',
   repository: 'ibome/ai-brush-hug-st',
   url: 'https://github.com/ibome/ai-brush-hug-st',
   storageProtocol: 2,

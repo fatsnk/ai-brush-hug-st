@@ -14,6 +14,7 @@ import { AdvancedPanel } from './advanced.js';
 import { BackupPanel } from './backup.js';
 import { RELEASE } from '../release.js';
 import { ChangelogPanel } from './changelog.js';
+import { ReleasePanel } from './release-panel.js';
 import { ReferenceAssets, normalizeReferenceImage, assetBase64 } from '../reference-assets.js';
 import { advancedOf, validateAdvanced, encodeVibe } from '../advanced-generation.js';
 import { prepareAdvancedPayload, finishAdvancedImages } from '../advanced-payload.js';
@@ -1744,7 +1745,17 @@ function renderGallery() {
   return renderDrawingManager(drawings, drawingUI);
 }
 
-const changelogPanel = new ChangelogPanel();
+const releasePanel = new ReleasePanel({
+  getTheme: () => state.characterTheme,
+  beforeUpdate: async () => {
+    await backupPanel.flush();
+    await backupPanel.ready();
+    if (backupPanel.active() || backupPanel.ui.busy) throw new Error('请等待当前生图、助手、编辑或备份任务完成后再更新');
+    const records = await backupPanel.tasks();
+    if (records.rows.some((row) => ['running', 'queued'].includes(row.status))) throw new Error('同账号仍有执行中或排队任务，请完成后再更新');
+  },
+});
+const changelogPanel = new ChangelogPanel(releasePanel);
 
 function renderConsole() {
   const renderer = { settings: () => renderSettings(state, backupPanel.html()), assistant: () => renderAssistant(state, assistantUI), generate: renderGenerate, batch: () => workbenchPanel.html() + renderTasks(), connection: renderConnection, characters: renderCharacters, styles: renderStyles, tags: () => tagPanel.html(), gallery: renderGallery, changelog: () => changelogPanel.html() }[state.page] || (() => renderSettings(state, backupPanel.html()));
@@ -1894,8 +1905,8 @@ export function showSettings() {
 
 export function showPage(page) {
   if (page === 'updates') {
-    backupPanel.ui.releaseOpen = true;
-    showPage('settings');
+    releasePanel.open = true;
+    showPage('changelog');
     host?.querySelector('[data-release-fold]')?.scrollIntoView({ block: 'start' });
     return;
   }

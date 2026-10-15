@@ -9,6 +9,7 @@ let previewVault;
 const assistantRequests = new Map();
 const extensionChatRequests = new Map();
 const releaseRequests = new Map();
+const updateRequests = new Map();
 const releaseListeners = new Set();
 let previewReleaseMonitor;
 let hostReleaseState;
@@ -25,6 +26,13 @@ window.addEventListener('message', (event) => {
     if (!pending) return;
     releaseRequests.delete(event.data.requestId); clearTimeout(pending.timer);
     receiveReleaseState(event.data.value); pending.resolve(event.data.value);
+  }
+  if (event.data?.type === 'linghuashi:update-result') {
+    const pending = updateRequests.get(event.data.requestId);
+    if (!pending) return;
+    updateRequests.delete(event.data.requestId); clearTimeout(pending.timer);
+    if (event.data.error) pending.reject(new Error(event.data.error));
+    else pending.resolve(event.data.value);
   }
 });
 function previewReleases() {
@@ -53,6 +61,20 @@ export function checkReleaseVersion() {
 }
 export function openExtensionManager() {
   if (isInstalled()) window.parent.postMessage({ type: 'linghuashi:extension-manager' }, location.origin);
+}
+export function updateExtensionVersion(version) {
+  if (!isInstalled()) return Promise.reject(new Error('请在酒馆内执行更新，设计预览可从发布页下载'));
+  return new Promise((resolve, reject) => {
+    const requestId = crypto.randomUUID();
+    const timer = setTimeout(() => {
+      updateRequests.delete(requestId); reject(new Error('更新响应超时，请先到扩展管理核对结果'));
+    }, 285000);
+    updateRequests.set(requestId, { resolve, reject, timer });
+    window.parent.postMessage({ type: 'linghuashi:update', requestId, version }, location.origin);
+  });
+}
+export function reloadUpdatedExtension() {
+  if (isInstalled()) window.parent.postMessage({ type: 'linghuashi:update-reload' }, location.origin);
 }
 window.addEventListener('message', (event) => {
   if (event.origin !== location.origin || event.source !== window.parent || event.data?.type !== 'linghuashi:extension-chat-result') return;

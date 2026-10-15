@@ -16,12 +16,14 @@ const noteHTML = (text) => text.split(/(`[^`]+`)/g).map((part) =>
   part.startsWith('`') && part.endsWith('`') ? `<code>${esc(part.slice(1, -1))}</code>` : esc(part)).join('');
 
 export class ChangelogPanel {
-  constructor() {
+  constructor(releasePanel) {
+    this.releasePanel = releasePanel;
     this.expanded = new Set(entries.slice(0, 1).map((entry) => entry.version));
   }
   html() {
     return `<section class="changelog-page" data-changelog-root aria-label="版本更新记录">
       <div class="page-heading"><div><h1>更新日志</h1><p>当前安装 v${esc(RELEASE.version)} · 共 ${entries.length} 个版本</p></div></div>
+      ${this.releasePanel.html()}
       <div class="changelog-toolbar" role="group" aria-label="日志展开操作">
         <button type="button" class="ui-button secondary" data-changelog-action="expand">${icon('expand')}<span>展开全部</span></button>
         <button type="button" class="ui-button secondary" data-changelog-action="collapse">${icon('minimize-2')}<span>收起全部</span></button>
@@ -35,11 +37,12 @@ export class ChangelogPanel {
   }
   capture(container) {
     const root = container.querySelector('[data-changelog-root]');
-    if (root) this.expanded = new Set([...root.querySelectorAll('details[open]')].map((node) => node.dataset.changelogVersion));
+    if (root) this.expanded = new Set([...root.querySelectorAll('[data-changelog-version][open]')].map((node) => node.dataset.changelogVersion));
   }
   bind(container) {
     const root = container.querySelector('[data-changelog-root]');
     if (!root) return;
+    this.releasePanel.bind(root);
     const folds = [...root.querySelectorAll('[data-changelog-version]')];
     for (const fold of folds) fold.addEventListener('toggle', () => {
       if (!root.isConnected) return;
