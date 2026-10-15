@@ -39,13 +39,16 @@ async function walk(directory, prefix, zip, scan = false) {
   }
 }
 await add(frontend, 'manifest.json', Buffer.from(JSON.stringify(manifest, null, 2) + '\n'));
-for (const name of ['README.md', 'CHANGELOG.md']) await add(frontend, name, await fs.readFile(path.join(root, name)), true);
+for (const name of ['README.md', 'CHANGELOG.md', 'LICENSE', 'qq-group-1076122953.png']) {
+  await add(frontend, name, await fs.readFile(path.join(root, name)), true);
+}
 await walk(path.join(root, 'docs'), 'docs/', frontend, true);
 await add(frontend, 'examples/linghuashi-client.js', await fs.readFile(path.join(root, 'examples/linghuashi-client.js')), true);
 await walk(path.join(root, 'extension-dist'), 'dist/', frontend, true);
 for (const name of ['index.mjs', 'task-ledger.mjs', 'image-versions.mjs', 'reference-assets.mjs', 'reference-actions.mjs', 'backup-records.mjs']) {
   await add(backend, `linghuashi-storage/${name}`, await fs.readFile(path.join(root, 'server/linghuashi-storage', name)), true);
 }
+await add(backend, 'linghuashi-storage/LICENSE', await fs.readFile(path.join(root, 'LICENSE')), true);
 for (const [label, zip] of [['ai-brush-hug-st', frontend], ['linghuashi-storage', backend]]) {
   const name = `${label}-v${RELEASE.version}.zip`, bytes = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE', compressionOptions: { level: 6 } });
   await fs.writeFile(path.join(output, name), bytes);
@@ -55,7 +58,8 @@ const checksums = files.map((item) => `${item.sha256}  ${item.name}`).join('\n')
 await fs.writeFile(path.join(output, 'SHA256SUMS.txt'), checksums);
 for (const directory of ['src', 'server', 'scripts', 'docs', 'examples']) await walk(path.join(root, directory), `${directory}/`, repository, true);
 for (const name of ['package.json', 'package-lock.json', 'vite.config.js', 'vite.extension.config.js',
-  'index.html', 'preview.html', 'extension-ui.html', 'extension.manifest.json', 'README.md', 'CHANGELOG.md', '.gitignore']) {
+  'index.html', 'preview.html', 'extension-ui.html', 'extension.manifest.json', 'README.md', 'CHANGELOG.md', 'LICENSE',
+  'qq-group-1076122953.png', '.gitignore']) {
   await add(repository, name, await fs.readFile(path.join(root, name)), true);
 }
 await add(repository, 'manifest.json', Buffer.from(JSON.stringify(manifest, null, 2) + '\n'));
