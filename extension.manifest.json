@@ -4,9 +4,9 @@
   "requires": [],
   "optional": [],
   "dependencies": [],
-  "js": "dist/index.js?ver=0.21.2&build=20261015-chat-sync-r1",
+  "js": "dist/index.js?ver=0.21.3&build=20261016-update-notice-r1",
   "author": "灵画师",
-  "version": "0.21.2",
+  "version": "0.21.3",
   "auto_update": false,
   "minimum_client_version": "1.12.13"
 }

@@ -1,5 +1,6 @@
 import { createCredentialVault } from './credential-vault.js';
 import { apiError } from './extension-api.js';
+import { createReleaseMonitor } from './release-monitor.js';
 
 const environment = () => window.__LINGHUASHI_ENV__ || {};
 const secretRequests = new Map();
@@ -7,6 +8,52 @@ const storageRequests = new Map();
 let previewVault;
 const assistantRequests = new Map();
 const extensionChatRequests = new Map();
+const releaseRequests = new Map();
+const releaseListeners = new Set();
+let previewReleaseMonitor;
+let hostReleaseState;
+function receiveReleaseState(value) {
+  if (!value || !['idle', 'checking', 'available', 'current', 'error'].includes(value.status)) return;
+  hostReleaseState = value;
+  for (const listener of releaseListeners) listener(value);
+}
+window.addEventListener('message', (event) => {
+  if (event.origin !== location.origin || event.source !== window.parent) return;
+  if (event.data?.type === 'linghuashi:release-state') receiveReleaseState(event.data.value);
+  if (event.data?.type === 'linghuashi:release-result') {
+    const pending = releaseRequests.get(event.data.requestId);
+    if (!pending) return;
+    releaseRequests.delete(event.data.requestId); clearTimeout(pending.timer);
+    receiveReleaseState(event.data.value); pending.resolve(event.data.value);
+  }
+});
+function previewReleases() {
+  if (!previewReleaseMonitor) {
+    previewReleaseMonitor = createReleaseMonitor({ storage: localStorage });
+    previewReleaseMonitor.subscribe(receiveReleaseState);
+  }
+  return previewReleaseMonitor;
+}
+export function getReleaseState() {
+  return isInstalled() ? hostReleaseState || environment().releaseState
+    || { status: 'idle', release: null, checkedAt: 0, error: '' } : previewReleases().getState();
+}
+export function subscribeReleaseState(listener) {
+  releaseListeners.add(listener);
+  return () => releaseListeners.delete(listener);
+}
+export function checkReleaseVersion() {
+  if (!isInstalled()) return previewReleases().check({ force: true });
+  return new Promise((resolve, reject) => {
+    const requestId = crypto.randomUUID();
+    const timer = setTimeout(() => { releaseRequests.delete(requestId); reject(new Error('检查更新超时，请稍后重试')); }, 20000);
+    releaseRequests.set(requestId, { resolve, reject, timer });
+    window.parent.postMessage({ type: 'linghuashi:release-check', requestId }, location.origin);
+  });
+}
+export function openExtensionManager() {
+  if (isInstalled()) window.parent.postMessage({ type: 'linghuashi:extension-manager' }, location.origin);
+}
 window.addEventListener('message', (event) => {
   if (event.origin !== location.origin || event.source !== window.parent || event.data?.type !== 'linghuashi:extension-chat-result') return;
   extensionChatRequests.get(event.data.requestId)?.(event.data);

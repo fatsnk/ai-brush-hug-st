@@ -1,11 +1,12 @@
 import { escapeHtml as esc, normalizeConfig, downloadJson } from '../config.js';
 import { icon, paintIcons } from '../icons.js';
-import { credentialRequest, currentAccount, isInstalled, storageRequest } from '../runtime.js';
+import { credentialRequest, currentAccount, isInstalled, storageRequest, getReleaseState,
+  subscribeReleaseState, checkReleaseVersion, openExtensionManager } from '../runtime.js';
 import { BACKUP_SECTIONS, CONFIG_KEYS, cloneBackup, normalizeBackupConfig, mergeBackupConfig,
   restoreBackupCredentials, rewriteBackupAssets, scrubBackup, referencedAssets, credentialNodes } from '../backup-config.js';
 import { createBackup, inspectBackup, backupIdentity, backupHash, archiveTasks } from '../backup.js';
 import { BackupStore } from '../backup-store.js';
-import { RELEASE, checkRelease, compareVersions } from '../release.js';
+import { RELEASE, compareVersions } from '../release.js';
 import { makeDrawing, saveBlob, formatBytes } from './drawings.js';
 import { normalizeBackupChats } from '../../server/linghuashi-storage/backup-records.mjs';
 import '../styles/backup.css';
@@ -25,6 +26,17 @@ export class BackupPanel {
       mode: 'merge', location: '', preserveChat: false, importKeys: true, importImages: true, importTasks: true,
       sections: new Set(BACKUP_SECTIONS.map(([id]) => id)), selected: null, shareCurrent: false,
       error: '', status: '', inspected: null, source: null, backend: null, release: null, checked: '', rollback: false, taskArchive: [] };
+    this.releaseState = getReleaseState();
+    subscribeReleaseState((value) => {
+      this.releaseState = value;
+      const section = document.querySelector('[data-release-fold]');
+      if (section) {
+        const focusedAction = section.contains(document.activeElement) ? document.activeElement.dataset.backupAction : null;
+        section.innerHTML = this.releaseHTML();
+        paintIcons(section);
+        if (focusedAction) section.querySelector(`[data-backup-action="${focusedAction}"]:not(:disabled)`)?.focus({ preventScroll: true });
+      }
+    });
     void Promise.all([this.journal.get('rollback'), this.journal.get('taskArchive')]).then(([rollback, tasks]) => {
       this.ui.rollback = Boolean(rollback); this.ui.taskArchive = tasks || [];
       if (document.querySelector('[data-backup-fold]')) this.rerender();
@@ -53,17 +65,24 @@ export class BackupPanel {
       </fieldset>
       <p class="backup-status" role="status" aria-live="polite">${esc(ui.error || ui.status)}</p>
     </details>
-    <details class="settings-band backup-band" data-release-fold ${ui.releaseOpen ? 'open' : ''}>
-      <summary>${icon('refresh-cw')}<span>版本与更新</span>${icon('chevron-down')}</summary>
+    <details class="settings-band backup-band" data-release-fold ${ui.releaseOpen ? 'open' : ''}>${this.releaseHTML()}</details>`;
+  }
+  releaseHTML() {
+    const ui = this.ui, releaseState = this.releaseState, latest = releaseState.release;
+    return `<summary>${icon('refresh-cw')}<span>版本与更新</span>${latest?.newer ? `<span class="release-new">有更新 v${esc(latest.version)}</span>` : ''}${icon('chevron-down')}</summary>
       <dl class="backup-version"><div><dt>前端版本</dt><dd>${RELEASE.version}</dd></div><div><dt>服务器组件</dt><dd>${esc(ui.backend
         ? `${ui.backend.version} · ${ui.backend.protocol === RELEASE.storageProtocol ? '协议兼容' : '需同步更新'}` : '尚未检查')}</dd></div></dl>
-      <div class="backup-actions">${command('refresh-cw', '检查版本', 'release', ui.busy)}
+      <div class="backup-actions">${command('refresh-cw', releaseState.status === 'checking' ? '正在检查…' : '检查版本', 'release', ui.busy || releaseState.status === 'checking')}
+        ${latest?.newer && isInstalled() ? command('download', '打开扩展管理', 'extension-manager', ui.busy) : ''}
+        ${latest?.newer ? `<a class="ui-button" href="${esc(latest.url)}" target="_blank" rel="noopener noreferrer">${icon('external-link')}查看新版与下载</a>` : ''}
         <button type="button" class="ui-button secondary" data-page="changelog">${icon('history')}更新日志</button>
         <a class="ui-button secondary" href="${RELEASE.url}" target="_blank" rel="noopener noreferrer">${icon('external-link')}安装仓库</a>
         <a class="ui-button secondary" href="${RELEASE.url}/releases" target="_blank" rel="noopener noreferrer">${icon('history')}发布与回退</a></div>
-      ${ui.release ? `<p role="status">${esc(ui.release.message)}</p>${ui.release.notes ? `<pre class="backup-notes">${esc(ui.release.notes)}</pre>` : ''}` : ''}
-      ${ui.checked ? `<small>检查时间：${esc(ui.checked)}</small>` : ''}
-    </details>`;
+      ${latest ? `<p role="status">${esc(latest.message)}${releaseState.error ? ' · 显示上次检查结果' : ''}</p>
+        ${latest.newer ? '<p class="backup-status">等待生图任务结束后，在酒馆扩展管理中更新灵画师，再刷新页面。</p>' : ''}
+        ${latest.notes ? `<pre class="backup-notes">${esc(latest.notes)}</pre>` : ''}` : ''}
+      ${releaseState.error ? `<p class="backup-status" role="status">${esc(releaseState.error)}</p>` : ''}
+      ${releaseState.checkedAt ? `<small>检查时间：${esc(new Date(releaseState.checkedAt).toLocaleString('zh-CN', { hour12: false }))}</small>` : ''}`;
   }
   shareHTML(state) {
     const ui = this.ui;
@@ -142,6 +161,7 @@ export class BackupPanel {
   }
   async command(action) {
     const ui = this.ui;
+    if (action === 'extension-manager') { openExtensionManager(); return; }
     if (action === 'choose') { document.querySelector('[data-backup-file]')?.click(); return; }
     if (action === 'cancel') { ui.inspected = null; ui.source = null; ui.password = ''; this.rerender(); return; }
     await this.operation(async () => {
@@ -176,9 +196,10 @@ export class BackupPanel {
         ui.status = '已撤回配置恢复，导入图片和素材仍保留';
       }
       if (action === 'release') {
-        const results = await Promise.allSettled([checkRelease(), isInstalled()
+        const results = await Promise.allSettled([checkReleaseVersion(), isInstalled()
           ? storageRequest('backup/status') : Promise.resolve({ version: '设计预览', protocol: RELEASE.storageProtocol })]);
-        ui.release = results[0].status === 'fulfilled' ? results[0].value : { message: results[0].reason.message, notes: '' };
+        this.releaseState = results[0].status === 'fulfilled' ? results[0].value
+          : { ...this.releaseState, status: 'error', error: results[0].reason.message };
         ui.backend = results[1].status === 'fulfilled' ? results[1].value : { version: '未安装、未启用或版本较旧', protocol: 0 };
         ui.checked = new Date().toLocaleString('zh-CN', { hour12: false }); ui.status = '';
       }

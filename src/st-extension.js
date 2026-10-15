@@ -10,6 +10,7 @@ import { createStorageRequest, STORAGE_ACTIONS } from './server-storage.js';
 import { createAssistantHost } from './assistant-host.js';
 import { chatIdentity } from './chat.js';
 import { RELEASE } from './release.js';
+import { createReleaseMonitor, RELEASE_CACHE_KEY } from './release-monitor.js';
 import { createExtensionAPI, apiError } from './extension-api.js';
 
 const VERSION = RELEASE.version;
@@ -31,6 +32,7 @@ async function start() {
   const profile = await response.json();
   if (typeof profile.handle !== 'string' || !profile.handle) throw new Error('酒馆账号无效');
   const account = profile.handle;
+  const releaseMonitor = createReleaseMonitor({ storage: localStorage });
   const storageRequest = createStorageRequest(() => getContext()?.getRequestHeaders?.());
   const credentialVault = createCredentialVault({
     account, storage: localStorage,
@@ -155,12 +157,40 @@ async function start() {
   openButton.className = 'menu_button menu_button_icon';
   openButton.setAttribute('aria-label', '打开灵画师控制台');
   openButton.innerHTML = `${icon('palette')}<span>灵画师</span>`;
+  const updateBadge = document.createElement('span');
+  updateBadge.dataset.releaseBadge = '';
+  updateBadge.hidden = true;
+  updateBadge.style.cssText = 'color:#9a281c;background:#ffe4c6;border:1px solid #d98f50;border-radius:4px;font-size:11px;line-height:1.4;padding:1px 5px;white-space:nowrap;font-weight:600';
+  openButton.append(updateBadge);
+  openButton.style.cssText = 'max-width:100%;flex-wrap:wrap';
   entry.append(openButton);
   paintIcons(entry);
   openButton.querySelector('svg').style.cssText = 'width:18px;height:18px;flex:none';
   const entryTarget = document.getElementById('extensions_settings') || document.getElementById('extensions_settings2');
   if (entryTarget) entryTarget.append(entry);
   else document.getElementById('extensionsMenu')?.append(entry);
+  function showReleaseState(value) {
+    const newer = value.release?.newer === true;
+    updateBadge.hidden = !newer;
+    updateBadge.textContent = newer ? `有更新 v${value.release.version}` : '';
+    openButton.setAttribute('aria-label', newer ? `打开灵画师控制台，有更新 v${value.release.version}` : '打开灵画师控制台');
+    openButton.title = newer ? `当前 v${VERSION}，新版本 v${value.release.version}，点击查看更新` : `灵画师 v${VERSION}`;
+    post('linghuashi:release-state', { value });
+  }
+  const unsubscribeRelease = releaseMonitor.subscribe(showReleaseState);
+  showReleaseState(releaseMonitor.getState());
+  function checkForUpdates() {
+    if (!destroyed && document.visibilityState !== 'hidden' && navigator.onLine !== false) void releaseMonitor.check();
+  }
+  function releaseCacheChanged(event) {
+    if (event.key === RELEASE_CACHE_KEY) releaseMonitor.refreshCache();
+  }
+  const releaseStartTimer = setTimeout(checkForUpdates, 5000);
+  const releaseTimer = setInterval(checkForUpdates, 15 * 60 * 1000);
+  window.addEventListener('focus', checkForUpdates);
+  window.addEventListener('online', checkForUpdates);
+  window.addEventListener('storage', releaseCacheChanged);
+  document.addEventListener('visibilitychange', checkForUpdates);
 
   function persist() {
     if (destroyed) return;
@@ -222,7 +252,7 @@ async function start() {
 
   function open(page) {
     if (destroyed) return;
-    if (['settings', 'generate', 'batch', 'gallery', 'assistant', 'characters', 'styles', 'tags', 'connection', 'changelog'].includes(page)) requestedPage = page;
+    if (['settings', 'updates', 'generate', 'batch', 'gallery', 'assistant', 'characters', 'styles', 'tags', 'connection', 'changelog'].includes(page)) requestedPage = page;
     floatingMenu.close();
     previousFocus = shadow.activeElement || document.activeElement;
     backdrop.hidden = false;
@@ -247,6 +277,17 @@ async function start() {
     if (destroyed || event.origin !== location.origin || event.source !== frame?.contentWindow) return;
     const data = event.data;
     if (!plainObject(data)) return;
+    if (data.type === 'linghuashi:release-check' && typeof data.requestId === 'string' && data.requestId.length <= 64) {
+      void releaseMonitor.check({ force: true }).then((value) => {
+        if (!destroyed) post('linghuashi:release-result', { requestId: data.requestId, value });
+      });
+      return;
+    }
+    if (data.type === 'linghuashi:extension-manager') {
+      const manager = document.getElementById('extensions_details');
+      if (manager) { close(); manager.click(); }
+      return;
+    }
     if (data.type === 'linghuashi:extension-response' || data.type === 'linghuashi:extension-task') {
       extensionAPI.receive(data); return;
     }
@@ -260,10 +301,12 @@ async function start() {
     }
     if (data.type === 'linghuashi:ready') {
       activeChat = chatContext();
-      post('linghuashi:init', { account, ui: clone(ui), layout: clone(layout), chat: activeChat, page: requestedPage });
+      post('linghuashi:init', { account, ui: clone(ui), layout: clone(layout), chat: activeChat,
+        page: requestedPage, releaseState: releaseMonitor.getState() });
       requestedPage = null;
     } else if (data.type === 'linghuashi:mounted') {
       mounted = true;
+      post('linghuashi:release-state', { value: releaseMonitor.getState() });
       resolveFrame();
       clearTimeout(sizeTimer);
       status.hidden = true;
@@ -332,6 +375,14 @@ async function start() {
     if (destroyed) return;
     destroyed = true;
     clearTimeout(sizeTimer);
+    clearTimeout(releaseStartTimer);
+    clearInterval(releaseTimer);
+    unsubscribeRelease();
+    releaseMonitor.destroy();
+    window.removeEventListener('focus', checkForUpdates);
+    window.removeEventListener('online', checkForUpdates);
+    window.removeEventListener('storage', releaseCacheChanged);
+    document.removeEventListener('visibilitychange', checkForUpdates);
     floatingMenu.destroy();
     chatLink?.destroy();
     assistantHost.destroy();
@@ -377,7 +428,7 @@ async function start() {
     if (skipClick) { skipClick = false; return; }
     floatingMenu.toggle();
   });
-  openButton.addEventListener('click', open);
+  openButton.addEventListener('click', () => open(releaseMonitor.getState().release?.newer ? 'updates' : undefined));
   shadow.addEventListener('click', (event) => {
     const action = event.target.closest('button')?.dataset.action;
     if (action === 'close' || event.target === backdrop) close();

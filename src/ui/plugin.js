@@ -1893,6 +1893,12 @@ export function showSettings() {
 }
 
 export function showPage(page) {
+  if (page === 'updates') {
+    backupPanel.ui.releaseOpen = true;
+    showPage('settings');
+    host?.querySelector('[data-release-fold]')?.scrollIntoView({ block: 'start' });
+    return;
+  }
   if (!['settings', 'generate', 'batch', 'gallery', 'assistant', 'characters', 'styles', 'tags', 'connection', 'changelog'].includes(page)) return;
   state.page = page;
   persist(); render();

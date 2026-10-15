@@ -19,7 +19,7 @@ async function boot() {
   });
 
   window.__LINGHUASHI_ENV__ = {
-    mode: 'extension', account: initial.account, ui: initial.ui, chat: initial.chat,
+    mode: 'extension', account: initial.account, ui: initial.ui, chat: initial.chat, releaseState: initial.releaseState,
   };
   const [{ normalizeConfig }, plugin] = await Promise.all([
     import('./config.js'), import('./ui/plugin.js'),
