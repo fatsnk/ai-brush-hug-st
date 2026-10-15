@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Import initial audited source package
+      - name: Import audited source package when present
         run: |
           if [ -f release-import.zip ]; then
             python3 - <<'PY'
@@ -21,7 +21,7 @@ jobs:
                       raise RuntimeError("Invalid package entry")
                   if name.parts[0] == ".github":
                       continue
-                  allowed = {"src", "server", "scripts", "docs", "dist", ".release-artifacts",
+                  allowed = {"src", "server", "scripts", "docs", "examples", "dist", ".release-artifacts",
                       "manifest.json", "extension.manifest.json", "package.json", "package-lock.json",
                       "vite.config.js", "vite.extension.config.js", "index.html", "preview.html",
                       "extension-ui.html", "README.md", "CHANGELOG.md", ".gitignore"}
@@ -49,7 +49,7 @@ jobs:
           cp -R extension-dist/. dist/
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src server scripts docs manifest.json extension.manifest.json dist package.json package-lock.json \
+          git add src server scripts docs examples manifest.json extension.manifest.json dist package.json package-lock.json \
             vite.config.js vite.extension.config.js index.html preview.html extension-ui.html README.md CHANGELOG.md .gitignore
           if [ -f release-import.zip ]; then
             git rm release-import.zip
@@ -59,5 +59,9 @@ jobs:
             git push
           fi
           VERSION=$(node --input-type=module -e "import { RELEASE } from './src/release.js'; console.log(RELEASE.version)")
+          NOTES="docs/releases/v${VERSION}.md"
+          if [ ! -f "${NOTES}" ]; then
+            NOTES=CHANGELOG.md
+          fi
           gh release create "v${VERSION}" .release-artifacts/*-v*.zip .release-artifacts/SHA256SUMS.txt \
-            --title "灵画师 ${VERSION}" --notes-file CHANGELOG.md --target "$(git rev-parse HEAD)"
+            --title "灵画师 ${VERSION}" --notes-file "${NOTES}" --target "$(git rev-parse HEAD)"
