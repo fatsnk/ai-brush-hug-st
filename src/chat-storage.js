@@ -133,7 +133,7 @@ export async function openChatStore(account, { mode = () => 'browser', request: 
     },
     async get(id) {
       if (mode() === 'server' && serverRequest) {
-        const row = syncedChat ? syncedRecords.get(id) : await serverRequest('chat/get', { id });
+        const row = syncedRecords.get(id) || await serverRequest('chat/get', { id });
         if (row) return remember(withTask(row, id), 'server');
       }
       const row = withTask(await local.get(id), id);

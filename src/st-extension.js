@@ -35,7 +35,7 @@ async function start() {
   if (typeof profile.handle !== 'string' || !profile.handle) throw new Error('酒馆账号无效');
   const account = profile.handle;
   const releaseMonitor = createReleaseMonitor({ storage: localStorage });
-  const storageRequest = createStorageRequest(() => getContext()?.getRequestHeaders?.());
+  const storageRequest = createStorageRequest(() => getContext()?.getRequestHeaders?.(), { account });
   const credentialVault = createCredentialVault({
     account, storage: localStorage,
     request: async (action, body) => {

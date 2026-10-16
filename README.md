@@ -4,7 +4,7 @@
 
 **作者：小波** · **许可：[BSD 2-Clause](LICENSE)**
 
-**当前前端版本：0.21.4** · **服务器组件：0.21.0，存储协议 2**
+**当前前端版本：0.22.0** · **可选服务器组件：0.21.0，存储协议 2**
 
 灵画师是 SillyTavern 的图片生成扩展。可以在生图工坊手动绘图，也可以识别聊天里的提示词，在原位置显示图片；支持 NovelAI、OpenAI 兼容、ComfyUI、SDWebUI 四种模式，以及角色档案、提示词编辑、图片历史版本和九套人物主题。
 
@@ -40,6 +40,7 @@ https://github.com/ibome/ai-brush-hug-st
 | NovelAI 高清放大、细节增强和导演工具 | [NovelAI 图片增强](docs/novelai-processing.md) |
 | SDWebUI 模型、LoRA、高清修复、图片放大和进度 | [SDWebUI 原生接入](docs/sdwebui.md) |
 | 备份、换设备、分享包、加密秘钥和恢复 | [备份与恢复](docs/backup.md) |
+| 内置账号存图、可选增强组件、下载与安装 | [扩展组件](docs/components.md) |
 | 秘钥、权限、模型列表、跨域和任务状态问题 | [常见问题](docs/faq.md) |
 | 其他扩展调用灵画师生图 | [扩展 API v1](docs/extension-api.md) · [客户端示例](examples/linghuashi-client.js) |
 
@@ -70,9 +71,11 @@ https://github.com/ibome/ai-brush-hug-st
 
 图片可保存在浏览器，或当前登录账号的酒馆服务器目录。「酒馆服务器」不是下载到电脑；浏览器图片也不会自动同步到其他设备。
 
-**持久化任务、酒馆服务器存图和服务器素材库需要 `linghuashi-storage` 组件。** 下载 Releases 中的服务器组件包，将 `linghuashi-storage/` 放入酒馆 `plugins/`，启用 `enableServerPlugins: true` 并重启酒馆。可通过 `allowed-accounts.json` 限定允许账号，账号间数据独立。
+**普通酒馆服务器存图无需额外组件。** 选择「插件设置 → 图片存储 → 酒馆服务器」即可通过酒馆自带接口保存原图、缩略图、参数和参考素材。文件保存在当前账号的 `user/images/linghuashi/`、`user/images/linghuashi-thumbnails/` 和 `user/files/linghuashi-*`，同账号换设备可读取作品与参数。
 
-0.21.4 是前端更新，服务器组件代码仍为 0.21.0／协议 2。发行包使用本次发布版本命名，检查面板显示组件自身版本，两者不必完全相同；首次安装或从旧版本升级时应使用本次配套组件。详见 [安装与更新](docs/install.md)。
+未安装增强组件时，任务记录与待保存响应保留在当前浏览器，刷新后可恢复；多设备同时生图的执行锁和关闭页面后的清理需要可选 `linghuashi-storage` 组件。已有组件和旧图片继续兼容，后来安装组件也不会隐藏先前的内置存储图片或当前浏览器任务。
+
+侧边栏「扩展组件」可查看状态、下载组件、展开安装步骤。服务器组件需管理员放入酒馆 `plugins/`，启用 `enableServerPlugins: true` 并重启。0.22.0 的组件包内部仍为 0.21.0／协议 2，已安装兼容组件无需更新。详见 [扩展组件](docs/components.md)。
 
 ## 更新与版本记录
 
@@ -83,6 +86,7 @@ https://github.com/ibome/ai-brush-hug-st
 - GitHub 发布新版后，扩展列表显示版本标记，当前主题的透明 Q 版人物喊「插件更新啦！」，点击进入更新页。同一版本关闭后不再反复提醒，版本标记仍保留。
 - 后台成功检查缓存一小时，查询失败不弹窗；手动「检查版本」可立即重新查询。Git 安装支持酒馆原生更新，ZIP 安装可下载前端包手动覆盖。
 - [0.21.4 发行说明](docs/releases/v0.21.4.md)：主题 Q 版提醒、更新面板移动与点击更新。
+- [0.22.0 发行说明](docs/releases/v0.22.0.md)：内置账号存图与可选扩展组件。
 - [0.21.3 发行说明](docs/releases/v0.21.3.md)：扩展列表更新提醒。
 - [0.21.2 发行说明](docs/releases/v0.21.2.md)：聊天配图同步的弹窗修复。
 - [0.21.1 发行说明](docs/releases/v0.21.1.md)：从 GitHub 0.11.1 升级的主要变化。

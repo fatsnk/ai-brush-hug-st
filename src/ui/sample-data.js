@@ -14,6 +14,7 @@ export const navigation = [
   { id: 'tags', title: '中文标签库', icon: 'list-filter' },
   { id: 'generate', title: '生图工坊', icon: 'wand-sparkles' },
   { id: 'gallery', title: '绘图管理', icon: 'images' },
+  { id: 'components', title: '扩展组件', icon: 'plug' },
   { id: 'changelog', title: '更新日志', icon: 'history' },
 ];
 

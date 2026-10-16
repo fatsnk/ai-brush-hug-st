@@ -1,0 +1,28 @@
+.components-page { min-width: 0; }
+.component-list { border-bottom: 1px solid var(--border); }
+.component-entry { display: flex; gap: 16px; padding: 22px 0; border-top: 1px solid var(--border); min-width: 0; }
+.component-symbol { display: grid; place-items: center; flex: 0 0 42px; height: 42px; color: var(--accent); background: var(--accent-soft); border-radius: 8px; }
+.component-symbol svg { width: 22px; height: 22px; }
+.component-copy { min-width: 0; flex: 1; }
+.component-title { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; }
+.component-title h2 { margin: 0; font-size: 16px; color: var(--ink); }
+.component-status { font-size: 12px; color: var(--muted); }
+.component-status.is-installed { color: var(--accent); }
+.component-copy p { margin: 10px 0; font-size: 13px; line-height: 1.8; overflow-wrap: anywhere; }
+.component-detail { color: var(--muted); }
+.component-copy code { font-size: 12px; white-space: normal; overflow-wrap: anywhere; }
+.component-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.component-actions .ui-button { text-decoration: none; max-width: 100%; }
+.component-error { color: var(--danger); }
+.component-install { margin-top: 16px; padding: 10px 0 0 14px; border-left: 2px solid var(--accent); }
+.component-install h3 { font-size: 13px; margin: 0 0 8px; }
+.component-install ol { padding-left: 20px; font-size: 13px; line-height: 1.9; }
+.component-install li + li { margin-top: 8px; }
+@media (max-width: 420px) {
+  .component-entry { gap: 10px; padding-block: 18px; }
+  .component-symbol { flex-basis: 30px; height: 32px; }
+  .component-symbol svg { width: 18px; height: 18px; }
+  .component-title h2 { font-size: 15px; }
+  .component-actions { gap: 6px; }
+  .component-actions .ui-button { font-size: 12px; padding-inline: 8px; }
+}

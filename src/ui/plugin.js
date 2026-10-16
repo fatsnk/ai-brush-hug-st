@@ -14,6 +14,7 @@ import { AdvancedPanel } from './advanced.js';
 import { BackupPanel } from './backup.js';
 import { RELEASE } from '../release.js';
 import { ChangelogPanel } from './changelog.js';
+import { ComponentsPanel } from './components.js';
 import { ReleasePanel } from './release-panel.js';
 import { ReferenceAssets, normalizeReferenceImage, assetBase64 } from '../reference-assets.js';
 import { advancedOf, validateAdvanced, encodeVibe } from '../advanced-generation.js';
@@ -1756,9 +1757,10 @@ const releasePanel = new ReleasePanel({
   },
 });
 const changelogPanel = new ChangelogPanel(releasePanel);
+const componentsPanel = new ComponentsPanel();
 
 function renderConsole() {
-  const renderer = { settings: () => renderSettings(state, backupPanel.html()), assistant: () => renderAssistant(state, assistantUI), generate: renderGenerate, batch: () => workbenchPanel.html() + renderTasks(), connection: renderConnection, characters: renderCharacters, styles: renderStyles, tags: () => tagPanel.html(), gallery: renderGallery, changelog: () => changelogPanel.html() }[state.page] || (() => renderSettings(state, backupPanel.html()));
+  const renderer = { settings: () => renderSettings(state, backupPanel.html()), assistant: () => renderAssistant(state, assistantUI), generate: renderGenerate, batch: () => workbenchPanel.html() + renderTasks(), connection: renderConnection, characters: renderCharacters, styles: renderStyles, tags: () => tagPanel.html(), gallery: renderGallery, components: () => componentsPanel.html(), changelog: () => changelogPanel.html() }[state.page] || (() => renderSettings(state, backupPanel.html()));
   const navigationPage = state.page === 'batch' ? 'generate' : state.page;
   const busy = ['queued', 'generating'].includes(runtimeState);
   const sessionName = isInstalled() ? esc(currentChat().name) : '林间的旅人';
@@ -1860,6 +1862,7 @@ function render(force = false) {
   advancedPanel.bind(host);
   backupPanel.bind(host);
   changelogPanel.bind(host);
+  componentsPanel.bind(host);
   tagPanel.bind(host);
   workbenchPanel.bind(host);
   attachPromptTagButtons(host, openPromptTools);
@@ -1910,7 +1913,7 @@ export function showPage(page) {
     host?.querySelector('[data-release-fold]')?.scrollIntoView({ block: 'start' });
     return;
   }
-  if (!['settings', 'generate', 'batch', 'gallery', 'assistant', 'characters', 'styles', 'tags', 'connection', 'changelog'].includes(page)) return;
+  if (!['settings', 'generate', 'batch', 'gallery', 'assistant', 'characters', 'styles', 'tags', 'connection', 'components', 'changelog'].includes(page)) return;
   state.page = page;
   persist(); render();
   if (page === 'assistant' && state.assistant.source === 'tavern' && isInstalled()) void fetchAssistantModels(false);
@@ -1961,7 +1964,8 @@ async function reloadDrawings() {
     state.favorites = drawings.filter((item) => item.favorite).map((item) => item.id);
     state.storageUsage = formatBytes(rows.reduce((sum, item) => sum + item.blob.size + item.thumbnail.size, 0));
     drawingUI.storageLocation = location;
-    state.storageStatus = location === 'server' ? '已连接 · 当前酒馆账号' : '';
+    state.storageStatus = location === 'server' ? drawingLibrary.server.stats?.enhanced
+      ? '已连接 · 当前酒馆账号 · 服务器增强可用' : '已连接 · 当前酒馆账号 · 内置存储' : '';
     if (location === 'server' && drawingLibrary.server.stats?.pendingFiles) {
       state.storageStatus = `${drawingLibrary.server.stats.pendingFiles} 张图片的磁盘文件待清理，可点击检查存储`;
     }

@@ -4,9 +4,9 @@
   "requires": [],
   "optional": [],
   "dependencies": [],
-  "js": "dist/index.js?ver=0.21.4&build=20261016-theme-updates-r1",
+  "js": "dist/index.js?ver=0.22.0&build=20261016-native-storage-r1",
   "author": "小波",
-  "version": "0.21.4",
+  "version": "0.22.0",
   "auto_update": false,
   "minimum_client_version": "1.12.13"
 }
