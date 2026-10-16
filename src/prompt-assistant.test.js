@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeAssistant, assistantURLs, assistantConnectionSync, assistantModelNames, buildAssistantMessages, parseAssistantResult, applyAssistantPlan, requestAssistantAPI } from './prompt-assistant.js';
+import { normalizeAssistant, assistantURLs, assistantConnectionSync, assistantModelNames, requestAssistantModels, buildAssistantMessages, parseAssistantResult, applyAssistantPlan, requestAssistantAPI } from './prompt-assistant.js';
 import { bindSmartSlot, bindingIsCurrent } from './chat.js';
 import { collectAssistantContext, createAssistantHost } from './assistant-host.js';
 import { createCredentialVault } from './credential-vault.js';
@@ -62,6 +62,66 @@ test('linked pairs propagate endpoint, key replacement and explicit clearing wit
 test('model names include all returned formats, remove duplicates and reject malformed items', () => {
   assert.deepEqual(assistantModelNames({ models: [null, { id: 'text-b' }, { name: 'text-a' }, 'text-b', '', 'a'.repeat(201)] }),
     ['text-a', 'text-b']);
+});
+
+test('assistant model requests normalize endpoints and keep credentials out of the URL and response', async () => {
+  const models = await requestAssistantModels({ endpoint: 'https://text.test/v1/' }, ' fixture-key ', {
+    fetcher: async (url, options) => {
+      assert.equal(url, 'https://text.test/v1/models');
+      assert.equal(options.headers.Authorization, 'Bearer fixture-key');
+      assert.equal(options.credentials, 'omit');
+      assert.equal(options.signal.aborted, false);
+      return Response.json({ data: [{ id: 'text-b' }, { id: 'text-a' }, { id: 'text-a' }] });
+    },
+  });
+  assert.deepEqual(models, ['text-a', 'text-b']);
+});
+
+test('assistant model failures distinguish auth, permissions, rate limits, malformed JSON and network errors', async () => {
+  for (const [status, message] of [[401, /API Key/], [403, /权限/], [429, /频繁/], [502, /HTTP 502/]]) {
+    await assert.rejects(requestAssistantModels({ endpoint: 'https://text.test' }, 'fixture-key', {
+      fetcher: async () => new Response('private upstream detail', { status }),
+    }), (error) => message.test(error.message) && !error.message.includes('private'));
+  }
+  await assert.rejects(requestAssistantModels({ endpoint: 'https://text.test' }, '', {
+    fetcher: async () => new Response('<html>private upstream detail</html>'),
+  }), /返回格式不正确.*手动填写/);
+  await assert.rejects(requestAssistantModels({ endpoint: 'https://text.test' }, '', {
+    fetcher: async () => Response.json({ data: [] }),
+  }), /列表为空.*手动填写/);
+  await assert.rejects(requestAssistantModels({ endpoint: 'https://text.test' }, '', {
+    fetcher: async () => { throw new TypeError('private connection detail'); },
+  }), (error) => /网络与跨域/.test(error.message) && !error.message.includes('private'));
+});
+
+test('assistant model requests abort without retrying and release their timeout', async () => {
+  const controller = new AbortController();
+  let requests = 0, requestSignal;
+  const pending = requestAssistantModels({ endpoint: 'https://text.test' }, '', {
+    signal: controller.signal,
+    fetcher: async (_url, { signal }) => {
+      requests++;
+      requestSignal = signal;
+      return new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
+    },
+  });
+  controller.abort(new DOMException('changed source', 'AbortError'));
+  await assert.rejects(pending, { name: 'AbortError' });
+  assert.equal(requestSignal.aborted, true);
+  assert.equal(requests, 1);
+  await assert.rejects(requestAssistantModels({ endpoint: 'https://text.test' }, '', {
+    signal: controller.signal, fetcher: () => { requests++; },
+  }), { name: 'AbortError' });
+  assert.equal(requests, 1);
+});
+
+test('assistant model timeout provides a readable failure without retrying', async (t) => {
+  const nativeTimer = globalThis.setTimeout;
+  t.mock.method(globalThis, 'setTimeout', (callback) => nativeTimer(callback, 1));
+  await assert.rejects(requestAssistantModels({ endpoint: 'https://text.test' }, '', {
+    fetcher: async (_url, { signal }) => new Promise((_resolve, reject) =>
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true })),
+  }), (error) => error.name === 'TimeoutError' && /读取超时/.test(error.message));
 });
 
 function textFixture() {

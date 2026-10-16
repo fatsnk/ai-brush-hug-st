@@ -29,8 +29,8 @@ import { watchComfyProgress } from '../comfy-advanced.js';
 import '../styles/advanced.css';
 import { groupVersions, currentDrawing, versionGroupId, editRelation, drawingGroups, validImageId } from '../../server/linghuashi-storage/image-versions.mjs';
 import '../styles/image-editor.css';
-import { normalizeAssistant, assistantURLs, assistantConnectionSync, assistantModelNames, buildAssistantMessages, parseAssistantResult, requestAssistantAPI, applyAssistantPlan } from '../prompt-assistant.js';
-import { renderAssistant } from './assistant.js';
+import { normalizeAssistant, assistantConnectionSync, assistantModelNames, requestAssistantModels, buildAssistantMessages, parseAssistantResult, requestAssistantAPI, applyAssistantPlan } from '../prompt-assistant.js';
+import { renderAssistant, assistantModelChoices } from './assistant.js';
 import '../styles/assistant.css';
 import { migrateProfileLibrary, normalizeProfileLibrary, normalizeProfile, effectiveProfiles, saveProfile, deleteProfile,
   updateProfileChat, resolveCharacterScene, applyCharacterScene, normalizeCharacterScene, restoreSceneProfiles } from '../character-profiles.js';
@@ -373,7 +373,8 @@ let openaiAdvancedOpen = false;
 let openaiTransportOpen = false;
 const assistantUI = { busy: false, error: '', controller: null, key: '', keyVisible: false, keyStatus: '',
   keyDirty: false, keyRevision: 0, keyTimer: null, keyWriting: Promise.resolve(),
-  models: [], modelsBusy: false, modelsStatus: '', tavernCurrent: '', modelSource: '', summary: null,
+  models: [], modelsBusy: false, modelsStatus: '', modelsError: '', modelsOpen: false, modelsQuery: '',
+  modelsController: null, tavernCurrent: '', modelSource: '', summary: null,
   binding: validBinding(state.assistantBinding) ? state.assistantBinding : null,
   requestId: typeof state.assistantRequestId === 'string' ? state.assistantRequestId : null };
 const profileUI = { scope: 'global', draft: structuredClone(state.characterProfiles.profiles[0] || null),
@@ -613,10 +614,92 @@ export async function restoreCredentials() {
 }
 
 function resetAssistantModels() {
+  assistantUI.modelsController?.abort();
+  assistantUI.modelsController = null;
+  assistantUI.modelsBusy = false;
   assistantUI.models = [];
   assistantUI.modelsStatus = '';
+  assistantUI.modelsError = '';
+  assistantUI.modelsOpen = false;
+  assistantUI.modelsQuery = '';
   assistantUI.tavernCurrent = '';
   assistantUI.modelSource = '';
+  refreshAssistantModels();
+}
+
+function refreshAssistantStatus() {
+  const root = host?.querySelector('.assistant-workspace');
+  if (!root) return;
+  const updateText = (selector, value, hideEmpty = false) => {
+    const node = host.querySelector(selector);
+    if (!node) return;
+    if (node.textContent !== value) node.textContent = value;
+    if (hideEmpty) node.hidden = !value;
+  };
+  updateText('[data-assistant-key-status]', assistantUI.keyStatus);
+  updateText('[data-assistant-model-status]', assistantUI.modelsBusy ? '正在读取模型列表…' : assistantUI.modelsStatus);
+  updateText('[data-assistant-model-error]', assistantUI.modelsError, true);
+  updateText('[data-assistant-error]', assistantUI.error, true);
+  const status = host.querySelector('[data-assistant-state]');
+  if (status && status.dataset.assistantState !== String(assistantUI.busy)) {
+    status.dataset.assistantState = String(assistantUI.busy);
+    status.className = `ui-status ${assistantUI.busy ? 'warning' : 'neutral'}`;
+    status.innerHTML = `${icon(assistantUI.busy ? 'loader-circle' : 'sparkles', assistantUI.busy ? 'spin' : '')}${assistantUI.busy ? '正在处理' : '就绪'}`;
+    paintIcons(status);
+  }
+  for (const action of ['generate', 'translate', 'polish', 'illustrate', 'use-current', 'apply', 'draw', 'copy', 'save-draft']) {
+    const button = root.querySelector(`[data-action="assistant-${action}"]`);
+    if (!button) continue;
+    button.disabled = action === 'copy' ? !state.assistantDraft?.positive
+      : assistantUI.busy || (['generate', 'translate', 'polish', 'illustrate', 'draw'].includes(action) && !state.enabled)
+        || (['apply', 'draw'].includes(action) && !state.assistantDraft?.positive);
+  }
+  const cancel = root.querySelector('[data-action="assistant-cancel"]');
+  if (cancel) cancel.hidden = !assistantUI.busy;
+  const refresh = root.querySelector('[data-action="assistant-models"]');
+  if (refresh) {
+    refresh.disabled = assistantUI.modelsBusy;
+    refresh.querySelector('svg')?.classList.toggle('spin', assistantUI.modelsBusy);
+  }
+  const key = root.querySelector('[data-assistant-key]');
+  if (key) key.type = assistantUI.keyVisible ? 'text' : 'password';
+  const reveal = root.querySelector('[data-action="assistant-toggle-key"]');
+  const revealLabel = assistantUI.keyVisible ? '隐藏助手秘钥' : '显示助手秘钥';
+  if (reveal && reveal.getAttribute('aria-label') !== revealLabel) {
+    reveal.setAttribute('aria-label', revealLabel);
+    reveal.title = assistantUI.keyVisible ? '隐藏秘钥' : '显示秘钥';
+    reveal.innerHTML = icon(assistantUI.keyVisible ? 'eye-off' : 'eye');
+    paintIcons(reveal);
+  }
+  const count = host.querySelector('.plugin-nav [data-page="gallery"] small');
+  if (count) count.textContent = String(state.history.length);
+  if (isInstalled()) {
+    const chat = currentChat(), session = host.querySelector('.session-label');
+    if (session && session.dataset.chatName !== chat.name) {
+      session.dataset.chatName = chat.name;
+      session.innerHTML = `${icon('message-square')}${escapeHtml(chat.name)}`;
+      paintIcons(session);
+    }
+    updateText('.plugin-bottom .bottom-actions > span', `当前会话 · ${chat.count} 条消息`);
+  }
+}
+
+function refreshAssistantModels() {
+  refreshAssistantStatus();
+  const picker = host?.querySelector('#assistant-model-picker');
+  if (!picker) return;
+  picker.hidden = !assistantUI.modelsOpen;
+  host.querySelector('[data-action="assistant-toggle-models"]')?.setAttribute('aria-expanded', String(assistantUI.modelsOpen));
+  const search = picker.querySelector('[data-assistant-model-search]');
+  if (search.value !== assistantUI.modelsQuery) search.value = assistantUI.modelsQuery;
+  const choices = assistantModelChoices(state.assistant, assistantUI);
+  const list = picker.querySelector('[data-assistant-model-list]');
+  list.innerHTML = choices.html;
+  picker.querySelector('[data-assistant-model-count]').textContent = `匹配 ${choices.count} 个${choices.count > 100 ? ' · 显示前 100 个' : ''}`;
+  paintIcons(list);
+  const input = host.querySelector('#assistant-model-input');
+  input.placeholder = state.assistant.source === 'api' ? '输入或选择模型'
+    : assistantUI.tavernCurrent ? `跟随当前模型：${assistantUI.tavernCurrent}` : '跟随酒馆当前模型';
 }
 
 function syncAssistantConnection(origin) {
@@ -752,36 +835,40 @@ async function analyzeChat(request) {
 async function fetchAssistantModels(refresh = true) {
   if (assistantUI.modelsBusy) return;
   const source = state.assistant.source;
-  assistantUI.modelsBusy = true; assistantUI.error = ''; render();
+  const controller = new AbortController();
+  assistantUI.modelsController = controller;
+  assistantUI.modelsBusy = true; assistantUI.modelsError = '';
+  refreshAssistantStatus();
   try {
     let models, message = '', current = '';
     if (source === 'tavern') {
-      const data = await assistantHostRequest('models', { refresh }, { timeout: 20 });
+      const data = await assistantHostRequest('models', { refresh }, { signal: controller.signal, timeout: 20 });
       models = assistantModelNames(data.models);
       current = data.current;
       message = data.message;
     } else {
       await saveAssistantKey();
+      controller.signal.throwIfAborted();
       const revision = apiEditRevision;
-      const response = await fetch(assistantURLs(state.assistant.endpoint).models, {
-        headers: assistantUI.key ? { Authorization: `Bearer ${assistantUI.key.trim()}` } : {},
-        signal: AbortSignal.timeout(15000),
-      });
-      if (!response.ok) throw new Error(`模型列表读取失败（${response.status}）`);
-      models = assistantModelNames(await response.json());
+      models = await requestAssistantModels(state.assistant, assistantUI.key, { signal: controller.signal });
       if (revision !== apiEditRevision) return;
-      if (!models.length) throw new Error('接口模型列表为空，可手动填写模型名');
     }
-    if (source !== state.assistant.source) return;
+    if (controller.signal.aborted || assistantUI.modelsController !== controller || source !== state.assistant.source) return;
     assistantUI.models = models;
     assistantUI.tavernCurrent = current;
     assistantUI.modelSource = source;
     assistantUI.modelsStatus = [models.length ? `已读取 ${models.length} 个模型` : '', message].filter(Boolean).join(' · ');
+    if (refresh) assistantUI.modelsOpen = true;
     if (refresh && models.length) toast(`已读取 ${models.length} 个模型`);
-  } catch (error) { assistantUI.error = error instanceof TypeError ? '模型列表连接失败，请检查地址与跨域设置' : error.message; }
+  } catch (error) {
+    if (!controller.signal.aborted && assistantUI.modelsController === controller) assistantUI.modelsError = error.message;
+  }
   finally {
-    assistantUI.modelsBusy = false; render();
-    if (source !== state.assistant.source && state.assistant.source === 'tavern') void fetchAssistantModels(false);
+    if (assistantUI.modelsController === controller) {
+      assistantUI.modelsController = null;
+      assistantUI.modelsBusy = false;
+      refreshAssistantModels();
+    }
   }
 }
 
@@ -1863,6 +1950,12 @@ function applyTokens() {
 
 function render(force = false) {
   if (!config || rendering) return;
+  const samePage = host.dataset.renderedPage === state.page && host.dataset.renderedSurface === config.surface;
+  // Background task polling must not replace the mobile form or its native picker.
+  if (!force && samePage && state.page === 'assistant' && config.surface === 'console') {
+    refreshAssistantStatus();
+    return;
+  }
   if (!force && advancedPanel.ui.painting) return;
   const editing = document.activeElement;
   if (!force && host.dataset.renderedPage === state.page
@@ -1885,7 +1978,7 @@ function render(force = false) {
   floatingMenu = null;
   const content = host.querySelector('.plugin-content');
   const scrollTop = content?.scrollTop || 0;
-  const samePage = host.dataset.renderedPage === state.page && host.dataset.renderedSurface === config.surface;
+  const navScroll = host.querySelector('.plugin-nav')?.scrollLeft || 0;
   changelogPanel.capture(host);
   applyTokens();
   host.innerHTML = config.surface === 'chat' ? renderChat() : renderConsole();
@@ -1894,7 +1987,10 @@ function render(force = false) {
   updateCredentialStatus();
   host.dataset.renderedPage = state.page;
   host.dataset.renderedSurface = config.surface;
-  if (samePage) host.querySelector('.plugin-content')?.scrollTo(0, scrollTop);
+  if (samePage) {
+    host.querySelector('.plugin-content')?.scrollTo(0, scrollTop);
+    host.querySelector('.plugin-nav')?.scrollTo(navScroll, 0);
+  }
   if (!state.enabled) {
     host.querySelectorAll('button[data-action="generate"]').forEach((button) => {
       button.disabled = true;
@@ -1993,7 +2089,7 @@ export function applyHostContext(chat) {
     if (profileUI.scope === 'chat' && !profileUI.dirty) loadProfileDraft();
     if (state.page === 'characters') void refreshProfileCards();
   }
-  render(true);
+  render(changed);
 }
 
 function toast(message) {
@@ -3300,11 +3396,21 @@ export function mountPlugin(root, next) {
       case 'assistant-use-current': {
         const snapshot = captureSnapshot(state);
         state.assistantInput = (snapshot.params || snapshot.config.params).positive;
-        persist(); render(); break;
+        persist(); render(true); break;
       }
       case 'assistant-cancel': assistantUI.controller?.abort(); break;
       case 'assistant-toggle-key':
-        assistantUI.keyVisible = !assistantUI.keyVisible; render(); break;
+        assistantUI.keyVisible = !assistantUI.keyVisible; refreshAssistantStatus(); break;
+      case 'assistant-toggle-models':
+        assistantUI.modelsOpen = !assistantUI.modelsOpen; refreshAssistantModels(); break;
+      case 'assistant-pick-model': {
+        const model = assistantUI.models[Number(target.dataset.assistantModelIndex)];
+        if (!model) break;
+        const key = state.assistant.source === 'api' ? 'model' : 'tavernModel';
+        state.assistant[key] = model; persist();
+        host.querySelector('#assistant-model-input').value = model;
+        assistantUI.modelsOpen = false; refreshAssistantModels(); break;
+      }
       case 'assistant-models': await fetchAssistantModels(); break;
       case 'assistant-apply':
         try { applyAssistantToParameters(); render(); } catch (error) { toast(error.message); } break;
@@ -3639,6 +3745,10 @@ export function mountPlugin(root, next) {
       }
       return;
     }
+    if (event.target.matches('[data-assistant-model-search]')) {
+      assistantUI.modelsQuery = event.target.value;
+      refreshAssistantModels(); return;
+    }
     if (event.target.matches('[data-assistant-key]')) {
       apiEditRevision++;
       resetAssistantModels();
@@ -3842,7 +3952,7 @@ export function mountPlugin(root, next) {
           if (entry) { entry[event.target.dataset.participantField] = event.target.value; saveProfileParticipants(selection); }
         }
       } catch (error) { toast(error.message); }
-      render(); return;
+      render(state.page === 'assistant'); return;
     }
     if (event.target.matches('[data-assistant-key]')) {
       try { await saveAssistantKey(); } catch { assistantUI.keyStatus = '助手秘钥保存失败，请重试'; render(); }
@@ -3854,7 +3964,7 @@ export function mountPlugin(root, next) {
         try { await syncAssistantConnection(key === 'endpoint' ? 'assistant' : undefined); }
         catch { assistantUI.keyStatus = '接口同步失败，请重试'; }
       }
-      if (['source', 'template', 'frequency'].includes(key)) render();
+      if (['source', 'template', 'frequency'].includes(key)) render(true);
       else if (event.target.type === 'number') event.target.value = state.assistant[key];
       if (key === 'source' && state.assistant.source === 'tavern' && isInstalled()) void fetchAssistantModels(false);
       return;

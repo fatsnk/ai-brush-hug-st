@@ -11,14 +11,29 @@ const options = (key, value, items) => `<select data-assistant="${key}" aria-lab
 const number = (key, label, value, min, max, step = 1) => field(label,
   `<input type="number" data-assistant="${key}" aria-label="${label}" min="${min}" max="${max}" step="${step}" value="${value}" />`);
 const toggle = (key, label, value) => `<label class="setting-switch-row"><span class="setting-switch-title">${label}</span><span class="ui-toggle"><input type="checkbox" data-assistant="${key}" aria-label="${label}" ${value ? 'checked' : ''} /><span></span></span></label>`;
-const command = (action, glyph, label, disabled = false, primary = false) => `<button type="button" data-action="${action}" class="ui-button ${primary ? 'primary' : 'secondary'}" ${disabled ? 'disabled' : ''}>${icon(glyph)}<span>${label}</span></button>`;
+const command = (action, glyph, label, disabled = false, primary = false, hidden = false) => `<button type="button" data-action="${action}" class="ui-button ${primary ? 'primary' : 'secondary'}" ${disabled ? 'disabled' : ''} ${hidden ? 'hidden' : ''}>${icon(glyph)}<span>${label}</span></button>`;
+
+export function assistantModelChoices(settings, ui) {
+  const query = (ui.modelsQuery || '').trim().toLocaleLowerCase();
+  const matches = ui.models.map((name, index) => ({ name, index }))
+    .filter(({ name }) => !query || name.toLocaleLowerCase().includes(query));
+  const current = settings.source === 'api' ? settings.model : settings.tavernModel;
+  return {
+    count: matches.length,
+    html: matches.slice(0, 100).map(({ name, index }) => `<button type="button" data-action="assistant-pick-model"
+      data-assistant-model-index="${index}" aria-pressed="${name === current}" title="${esc(name)}"><span>${esc(name)}</span>
+      ${name === current ? icon('check') : ''}</button>`).join('')
+      || `<p class="assistant-context">${ui.modelsBusy ? '正在读取模型列表…' : ui.models.length ? '没有匹配的模型' : '尚未读取模型列表'}</p>`,
+  };
+}
 
 export function renderAssistant(state, ui) {
   const a = state.assistant;
   const plan = state.assistantDraft;
   const busy = ui.busy;
+  const modelChoices = assistantModelChoices(a, ui);
   return `<div class="page-heading"><div><h1>提示词助手</h1><p>${state.provider === 'novelai' ? 'NovelAI' : state.provider === 'comfyui' ? 'ComfyUI' : state.provider === 'sdwebui' ? 'SDWebUI' : 'OpenAI兼容'}</p></div>
-    <span class="ui-status ${busy ? 'warning' : 'neutral'}" role="status">${icon(busy ? 'loader-circle' : 'sparkles', busy ? 'spin' : '')}${busy ? '正在处理' : '就绪'}</span></div>
+    <span class="ui-status ${busy ? 'warning' : 'neutral'}" data-assistant-state="${busy}" role="status">${icon(busy ? 'loader-circle' : 'sparkles', busy ? 'spin' : '')}${busy ? '正在处理' : '就绪'}</span></div>
     <div class="assistant-workspace">
       <section class="settings-band assistant-editor" aria-label="提示词编辑">
         <div class="settings-band-heading"><h2>${icon('pencil')}画面描述</h2>${ui.binding ? '<span class="settings-label">已关联聊天消息</span>' : ''}</div>
@@ -34,9 +49,9 @@ export function renderAssistant(state, ui) {
           ${command('assistant-polish', 'wand-sparkles', '润色', busy || !state.enabled)}
           ${command('assistant-use-current', 'copy', '读取当前提示词', busy)}
           ${command('assistant-illustrate', 'message-square', '当前消息配图', busy || !state.enabled)}
-          ${busy ? command('assistant-cancel', 'x', '取消') : ''}
+          ${command('assistant-cancel', 'x', '取消', false, false, !busy)}
         </div>
-        ${ui.error ? `<p class="assistant-error" role="alert">${esc(ui.error)}</p>` : ''}
+        <p class="assistant-error" data-assistant-error role="alert" ${ui.error ? '' : 'hidden'}>${esc(ui.error)}</p>
         ${ui.summary ? `<p class="assistant-context">上下文 ${ui.summary.messages} 条 · 角色 ${ui.summary.characters} 个 · 世界书 ${ui.summary.worldCharacters} 字</p>` : ''}
         ${renderCharacterSelection(state, currentChat(), { compact: true })}
         ${plan ? `<div class="assistant-result">
@@ -76,8 +91,19 @@ export function renderAssistant(state, ui) {
           <p class="assistant-context" data-assistant-key-status>${esc(ui.keyStatus || '')}</p>
           ${number('temperature', '温度', a.temperature, 0, 2, 0.1)}
           ` : ''}
-        ${field('文字模型', `<div class="input-with-button"><input data-assistant="${a.source === 'api' ? 'model' : 'tavernModel'}" aria-label="助手文字模型" maxlength="200" list="assistant-model-list" placeholder="${esc(a.source === 'api' ? '输入或选择模型' : ui.tavernCurrent ? `跟随当前模型：${ui.tavernCurrent}` : '跟随酒馆当前模型')}" value="${esc(a.source === 'api' ? a.model : a.tavernModel)}" /><button type="button" class="ui-icon-button" data-action="assistant-models" title="获取文字模型列表" aria-label="获取文字模型列表" ${ui.modelsBusy ? 'disabled' : ''}>${icon('refresh-cw')}</button></div><datalist id="assistant-model-list">${ui.models.map((id) => `<option value="${esc(id)}"></option>`).join('')}</datalist>`)}
+        <div class="ui-field assistant-model-field"><label for="assistant-model-input">文字模型</label>
+          <div class="input-with-button"><input id="assistant-model-input" data-assistant="${a.source === 'api' ? 'model' : 'tavernModel'}" aria-label="助手文字模型" maxlength="200" autocomplete="off" autocapitalize="off" spellcheck="false"
+            placeholder="${esc(a.source === 'api' ? '输入或选择模型' : ui.tavernCurrent ? `跟随当前模型：${ui.tavernCurrent}` : '跟随酒馆当前模型')}" value="${esc(a.source === 'api' ? a.model : a.tavernModel)}" />
+            <button type="button" class="ui-icon-button" data-action="assistant-toggle-models" title="选择文字模型" aria-label="选择文字模型" aria-expanded="${Boolean(ui.modelsOpen)}" aria-controls="assistant-model-picker">${icon('chevron-down')}</button>
+            <button type="button" class="ui-icon-button" data-action="assistant-models" title="获取文字模型列表" aria-label="获取文字模型列表" ${ui.modelsBusy ? 'disabled' : ''}>${icon('refresh-cw', ui.modelsBusy ? 'spin' : '')}</button></div>
+          <div class="assistant-model-picker" id="assistant-model-picker" ${ui.modelsOpen ? '' : 'hidden'}>
+            <input type="search" data-assistant-model-search aria-label="搜索助手模型" placeholder="搜索模型" maxlength="200" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(ui.modelsQuery || '')}" />
+            <p class="assistant-context" data-assistant-model-count>匹配 ${modelChoices.count} 个${modelChoices.count > 100 ? ' · 显示前 100 个' : ''}</p>
+            <div class="assistant-model-list" data-assistant-model-list role="group" aria-label="助手模型列表">${modelChoices.html}</div>
+          </div>
+        </div>
         <p class="assistant-context" data-assistant-model-status role="status">${esc(ui.modelsStatus || '')}</p>
+        <p class="assistant-error" data-assistant-model-error role="alert" ${ui.modelsError ? '' : 'hidden'}>${esc(ui.modelsError || '')}</p>
         <div class="assistant-grid">${number('maxTokens', '最大输出 Token', a.maxTokens, 256, 8192)}${number('timeout', '超时（秒）', a.timeout, 15, 300)}</div>
         <div class="settings-band-heading"><h2>${icon('message-square')}上下文</h2></div>
         <div class="assistant-grid">${number('contextMessages', '最近消息数', a.contextMessages, 1, 40)}${number('contextCharacters', '聊天字符上限', a.contextCharacters, 2000, 60000)}</div>

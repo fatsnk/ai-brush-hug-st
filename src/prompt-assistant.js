@@ -93,6 +93,46 @@ export function assistantModelNames(data) {
     .filter((id) => typeof id === 'string' && id.trim() && id.length <= 200).map((id) => id.trim()))].sort() : [];
 }
 
+export async function requestAssistantModels(settings, key, { signal, fetcher = fetch } = {}) {
+  const url = assistantURLs(settings.endpoint).models;
+  if (globalThis.location?.protocol === 'https:' && new URL(url).protocol === 'http:') {
+    throw new Error('HTTPS 酒馆需使用 HTTPS 文字接口');
+  }
+  const controller = new AbortController();
+  const cancel = () => controller.abort(signal.reason);
+  signal?.throwIfAborted();
+  signal?.addEventListener('abort', cancel, { once: true });
+  const timer = setTimeout(() => controller.abort(new DOMException('模型列表读取超时，请手动重试', 'TimeoutError')), 15000);
+  try {
+    const response = await fetcher(url, {
+      headers: { Accept: 'application/json', ...(key.trim() ? { Authorization: `Bearer ${key.trim()}` } : {}) },
+      credentials: 'omit', signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(({
+      401: '文字接口鉴权失败，请检查助手 API Key',
+      403: '文字模型列表访问被拒绝，请检查接口权限',
+      429: '模型列表请求过于频繁，请稍后手动重试',
+    })[response.status] || `模型列表读取失败（HTTP ${response.status}）`);
+    let data;
+    try { data = await response.json(); }
+    catch (error) {
+      if (controller.signal.aborted) throw error;
+      throw new Error('模型列表返回格式不正确，可手动填写模型名');
+    }
+    controller.signal.throwIfAborted();
+    const models = assistantModelNames(data);
+    if (!models.length) throw new Error('接口模型列表为空，可手动填写模型名');
+    return models;
+  } catch (error) {
+    if (controller.signal.aborted) throw controller.signal.reason;
+    if (error instanceof TypeError) throw new Error('模型列表连接失败，请检查文字接口地址、当前设备网络与跨域设置；也可手动填写模型名');
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', cancel);
+  }
+}
+
 export function promptFormat(provider, model, choice = 'auto') {
   if (choice !== 'auto') return choice;
   return provider === 'novelai' || /nai-diffusion/i.test(model || '') || ['comfyui', 'sdwebui'].includes(provider) ? 'tags' : 'natural';
