@@ -1,0 +1,64 @@
+{
+  "version": "0.23.0",
+  "build": "20261016-release-protection-r1",
+  "profile": "light-identifiers-v1",
+  "sourceMaps": false,
+  "files": [
+    {
+      "name": "assets/config-C4NmhegM.js",
+      "protected": true,
+      "beforeBytes": 26475,
+      "bytes": 41359,
+      "sha256": "42366ef105d117792436d1a76f406c4bbd5cd6d84d0cbb87fabbcd4894c242a9"
+    },
+    {
+      "name": "assets/plugin-DnL-fHnY.js",
+      "protected": true,
+      "beforeBytes": 552567,
+      "bytes": 817856,
+      "sha256": "ae09401592909a0b67f08401abba2e1de5a1dead5779a847a26df54dd4da77c6"
+    },
+    {
+      "name": "assets/preload-helper-XWh0egDF.js",
+      "protected": true,
+      "beforeBytes": 1534,
+      "bytes": 3044,
+      "sha256": "57d3855c5ff5cdc3fc39cbc3db46558515298aa2a201d8c35e2fb50b8afb74f3"
+    },
+    {
+      "name": "assets/rolldown-runtime-Cx38DWnk.js",
+      "protected": true,
+      "beforeBytes": 1106,
+      "bytes": 2161,
+      "sha256": "41a21875d2233e7e1858ab4601d0deb132d04122bb6e59bd65d6e5b9b7e55a1b"
+    },
+    {
+      "name": "assets/ui-CoeZL_8n.js",
+      "protected": true,
+      "beforeBytes": 3274,
+      "bytes": 4952,
+      "sha256": "eb5f870619b3834dee25c6a84ce1ec16a3ba42b89250565979245c199b9ce167"
+    },
+    {
+      "name": "assets/update-mascots-BODDaNTo.js",
+      "protected": true,
+      "beforeBytes": 109246,
+      "bytes": 167361,
+      "sha256": "b23c5cfe6462101298cb805712210c636ca619023384f9ac45c6520e92882834"
+    },
+    {
+      "name": "assets/vendor-Dmzb7ERF.js",
+      "protected": false,
+      "beforeBytes": 111768,
+      "bytes": 112040,
+      "sha256": "4af44a9119c7034101aeba745a33a54fbce7b06587369805840bd767ede7c4e5"
+    },
+    {
+      "name": "index.js",
+      "protected": true,
+      "beforeBytes": 74099,
+      "bytes": 115802,
+      "sha256": "0adf5b5bfaf6e7350459ccf41e711140450c11011135575d6a952f5722465d3e"
+    }
+  ]
+}

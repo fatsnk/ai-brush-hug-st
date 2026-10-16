@@ -1,24 +1,49 @@
-BSD 2-Clause License
+灵画师个人使用与署名许可协议 1.0
+Linghuashi Personal Use and Attribution License 1.0
 
 Copyright (c) 2026 小波
+生效版本：0.23.0；发布日期：2026-10-16。
 
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are met:
+一、适用范围与既有权利
+本协议仅适用于作者小波依法有权授权、从 0.23.0 起以本协议新发布的原创新增或修改内容。
+0.22.2 及更早版本已经按 BSD 2-Clause 授予的权利不被撤销；从这些版本沿用且可独立识别
+的原有代码仍保留相应 BSD 权利。完整旧许可见 LICENSES/BSD-2-Clause-legacy.txt。
+第三方代码、图标、标志和其他素材按各自许可或权利归属处理，本协议不改变其独立使用权利。
+本协议不是 OSI 开源许可证，公开可读的代码不表示作者额外放弃本协议规定的权利。
 
-1. Redistributions of source code must retain the above copyright notice, this
-   list of conditions and the following disclaimer.
+二、免费允许的用途
+允许从官方仓库或官方发行页下载安装、运行、备份本软件，并为本人自用修改和调试。
+允许在自建 SillyTavern 酒馆服务器中安装官方原版，供该服务器用户正常使用，保留本协议、
+作者署名和官方来源；不因正常提供酒馆服务而被要求另行授权。
+允许分享官方仓库及官方发行页链接，以及为问题反馈和向官方贡献补丁展示必要的代码片段。
+不限制用户对自己生成的图片、输入提示词、个人配置和聊天数据的使用；其权利受相关素材、
+模型及服务条款约束，不由本协议额外限制。
 
-2. Redistributions in binary form must reproduce the above copyright notice,
-   this list of conditions and the following disclaimer in the documentation
-   and/or other materials provided with the distribution.
+三、需要事先取得作者书面许可的行为
+对本协议适用的内容，未经作者书面许可，不得：
+1. 向他人重新分发、镜像托管或销售软件副本，包括修改版、重新打包版或嵌入其他发行包；
+   第二条允许的官方原版酒馆部署、必要备份和平台服务条款授予的权利除外。
+2. 将软件改名、换标或删除作者及官方来源后作为另一个项目发布，或冒充原创作者或官方版本。
+3. 单独出售本软件、修改版或其授权，或将本软件的代码、文档和资源包装为自己的原创作品。
+4. 删除、隐匿或伪造本协议、版权声明及本软件已有的作者署名和官方来源信息。
+这些限制不适用于第一条保留的 BSD 内容和第三方内容，也不缩减法律规定的不可排除权利。
 
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+四、公开托管平台
+代码托管平台依据其服务条款授予的平台内浏览、缓存、展示和 fork 等权利保持有效。
+平台内 fork 不自动授予本协议未允许的另行分发、销售或冒充原作的权利。
+本协议不要求技术阻止调试或本地自用修改，不设置联网授权、设备绑定或远程停用。
+
+五、署名与来源
+作者：小波。
+官方仓库：https://github.com/ibome/ai-brush-hug-st
+授权联系及问题反馈：通过官方仓库 GitHub Issues 联系作者。
+
+六、免责声明
+软件按现状提供。在适用法律允许的范围内，作者不提供适销性、特定用途适用性、不侵权、
+连续可用或无错误的保证；对使用或无法使用软件导致的间接损失不承担责任。
+本条不排除法律规定不得排除或限制的责任。
+
+七、违约及其他许可
+违反本协议限制时，作者可要求停止未获授权的行为；使用者应停止相关分发、销售和冒充行为。
+作者可另行书面授权特定用途，已取得的书面授权按其约定执行。
+本协议不追溯改变旧版 BSD 授权，也不取代第三方许可。

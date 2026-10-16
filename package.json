@@ -1,8 +1,8 @@
 {
   "name": "ai-brush-hug-st",
-  "version": "0.22.2",
+  "version": "0.23.0",
   "author": "小波",
-  "license": "BSD-2-Clause",
+  "license": "SEE LICENSE IN LICENSE",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,7 @@
     "build": "vite build",
     "build:extension": "vite build --config vite.extension.config.js",
     "preview": "vite preview --host 127.0.0.1",
-    "test": "node --test src/*.test.js server/linghuashi-storage/*.test.mjs",
+    "test": "node --test src/*.test.js server/linghuashi-storage/*.test.mjs scripts/*.test.mjs",
     "test:backup": "node --test src/backup.test.js server/linghuashi-storage/backup-records.test.mjs",
     "package:release": "node scripts/package-release.mjs",
     "test:generation": "node --test src/generation.test.js src/retention.test.js",
@@ -39,6 +39,7 @@
     "lucide": "1.54.0"
   },
   "devDependencies": {
+    "javascript-obfuscator": "5.9.0",
     "vite": "8.3.4"
   }
 }

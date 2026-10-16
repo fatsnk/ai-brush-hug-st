@@ -4,9 +4,9 @@
   "requires": [],
   "optional": [],
   "dependencies": [],
-  "js": "dist/index.js?ver=0.22.2&build=20261016-stream-render-r1",
+  "js": "dist/index.js?ver=0.23.0&build=20261016-release-protection-r1",
   "author": "小波",
-  "version": "0.22.2",
+  "version": "0.23.0",
   "auto_update": false,
   "minimum_client_version": "1.12.13"
 }
