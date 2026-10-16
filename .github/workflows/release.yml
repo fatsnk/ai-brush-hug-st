@@ -65,5 +65,10 @@ jobs:
           if [ ! -f "${NOTES}" ]; then
             NOTES=CHANGELOG.md
           fi
-          gh release create "v${VERSION}" .release-artifacts/*-v*.zip .release-artifacts/SHA256SUMS.txt \
-            --title "灵画师 ${VERSION}" --notes-file "${NOTES}" --target "$(git rev-parse HEAD)"
+          if gh release view "v${VERSION}" >/dev/null 2>&1; then
+            gh release upload "v${VERSION}" .release-artifacts/*-v*.zip .release-artifacts/SHA256SUMS.txt --clobber
+            gh release edit "v${VERSION}" --title "灵画师 ${VERSION}" --notes-file "${NOTES}"
+          else
+            gh release create "v${VERSION}" .release-artifacts/*-v*.zip .release-artifacts/SHA256SUMS.txt \
+              --title "灵画师 ${VERSION}" --notes-file "${NOTES}" --target "$(git rev-parse HEAD)"
+          fi
