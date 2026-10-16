@@ -2067,7 +2067,7 @@ export function showPage(page) {
   if (!['settings', 'generate', 'batch', 'gallery', 'assistant', 'characters', 'styles', 'tags', 'connection', 'components', 'debug', 'changelog'].includes(page)) return;
   if (page === 'changelog' && releasePanel.hasUpdate) releasePanel.open = true;
   state.page = page;
-  persist(); render();
+  persist(); render(page === 'assistant');
   if (page === 'assistant' && state.assistant.source === 'tavern' && isInstalled()) void fetchAssistantModels(false);
   if (page === 'characters') void refreshProfileCards();
 }

@@ -4,7 +4,7 @@
   "requires": [],
   "optional": [],
   "dependencies": [],
-  "js": "dist/index.js?ver=0.24.1&build=20261016-assistant-mobile-r1",
+  "js": "dist/index.js?ver=0.24.1&build=20261016-assistant-mobile-r2",
   "author": "小波",
   "version": "0.24.1",
   "auto_update": false,
