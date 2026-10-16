@@ -1,4 +1,5 @@
 import { applyCharacterScene, normalizeCharacterScene, normalizeCharacterDirections, profileContext } from './character-profiles.js';
+import { withRequestTimeout } from './request-timeout.js';
 
 export const ASSISTANT_DEFAULTS = Object.freeze({
   source: 'tavern', endpoint: '', model: '', tavernModel: '', keyRef: '', apiLink: null,
@@ -98,39 +99,33 @@ export async function requestAssistantModels(settings, key, { signal, fetcher = 
   if (globalThis.location?.protocol === 'https:' && new URL(url).protocol === 'http:') {
     throw new Error('HTTPS 酒馆需使用 HTTPS 文字接口');
   }
-  const controller = new AbortController();
-  const cancel = () => controller.abort(signal.reason);
-  signal?.throwIfAborted();
-  signal?.addEventListener('abort', cancel, { once: true });
-  const timer = setTimeout(() => controller.abort(new DOMException('模型列表读取超时，请手动重试', 'TimeoutError')), 15000);
-  try {
-    const response = await fetcher(url, {
-      headers: { Accept: 'application/json', ...(key.trim() ? { Authorization: `Bearer ${key.trim()}` } : {}) },
-      credentials: 'omit', signal: controller.signal,
-    });
-    if (!response.ok) throw new Error(({
-      401: '文字接口鉴权失败，请检查助手 API Key',
-      403: '文字模型列表访问被拒绝，请检查接口权限',
-      429: '模型列表请求过于频繁，请稍后手动重试',
-    })[response.status] || `模型列表读取失败（HTTP ${response.status}）`);
-    let data;
-    try { data = await response.json(); }
-    catch (error) {
-      if (controller.signal.aborted) throw error;
-      throw new Error('模型列表返回格式不正确，可手动填写模型名');
+  return withRequestTimeout(signal, 15000, '模型列表读取超时，请手动重试', async (requestSignal) => {
+    try {
+      const response = await fetcher(url, {
+        headers: { Accept: 'application/json', ...(key.trim() ? { Authorization: `Bearer ${key.trim()}` } : {}) },
+        credentials: 'omit', signal: requestSignal,
+      });
+      if (!response.ok) throw new Error(({
+        401: '文字接口鉴权失败，请检查助手 API Key',
+        403: '文字模型列表访问被拒绝，请检查接口权限',
+        429: '模型列表请求过于频繁，请稍后手动重试',
+      })[response.status] || `模型列表读取失败（HTTP ${response.status}）`);
+      let data;
+      try { data = await response.json(); }
+      catch (error) {
+        if (requestSignal.aborted) throw error;
+        throw new Error('模型列表返回格式不正确，可手动填写模型名');
+      }
+      requestSignal.throwIfAborted();
+      const models = assistantModelNames(data);
+      if (!models.length) throw new Error('接口模型列表为空，可手动填写模型名');
+      return models;
+    } catch (error) {
+      if (requestSignal.aborted) throw error;
+      if (error instanceof TypeError) throw new Error('模型列表连接失败，请检查文字接口地址、当前设备网络与跨域设置；也可手动填写模型名');
+      throw error;
     }
-    controller.signal.throwIfAborted();
-    const models = assistantModelNames(data);
-    if (!models.length) throw new Error('接口模型列表为空，可手动填写模型名');
-    return models;
-  } catch (error) {
-    if (controller.signal.aborted) throw controller.signal.reason;
-    if (error instanceof TypeError) throw new Error('模型列表连接失败，请检查文字接口地址、当前设备网络与跨域设置；也可手动填写模型名');
-    throw error;
-  } finally {
-    clearTimeout(timer);
-    signal?.removeEventListener('abort', cancel);
-  }
+  });
 }
 
 export function promptFormat(provider, model, choice = 'auto') {
@@ -212,21 +207,33 @@ export async function requestAssistantText(settings, key, messages, { signal, fe
   if (!key.trim()) throw new Error('请填写提示词助手的 API Key');
   const url = assistantURLs(options.endpoint).completions;
   if (globalThis.location?.protocol === 'https:' && new URL(url).protocol === 'http:') throw new Error('HTTPS 酒馆需使用 HTTPS 文字接口');
-  const response = await fetcher(url, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key.trim()}` },
-    body: JSON.stringify({ model: options.model.trim(), messages, temperature: options.temperature, max_tokens: options.maxTokens, stream: false }),
-    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(options.timeout * 1000)]) : AbortSignal.timeout(options.timeout * 1000),
+  return withRequestTimeout(signal, options.timeout * 1000, '文字接口请求超时，请稍后手动重试', async (requestSignal) => {
+    let response;
+    try { response = await fetcher(url, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key.trim()}` },
+      body: JSON.stringify({ model: options.model.trim(), messages, temperature: options.temperature, max_tokens: options.maxTokens, stream: false }),
+      credentials: 'omit', signal: requestSignal,
+    }); } catch (error) {
+      if (!requestSignal.aborted && error instanceof TypeError) {
+        throw new Error('文字接口连接失败，请检查接口地址、当前设备网络与跨域设置；可点击“检测助手网络”定位');
+      }
+      throw error;
+    }
+    if (!response.ok) {
+      throw new Error(({ 401: '文字接口鉴权失败，请检查 Key', 403: '文字模型访问被拒绝', 429: '文字接口限流，请稍后手动重试' })[response.status] || `文字接口请求失败（${response.status}）`);
+    }
+    let data;
+    try { data = await response.json(); }
+    catch (error) {
+      if (requestSignal.aborted) throw error;
+      throw new Error('文字接口返回格式不正确，请检查地址是否为 OpenAI 兼容聊天补全接口');
+    }
+    const content = data.choices?.[0]?.message?.content;
+    const raw = typeof content === 'string' ? content : Array.isArray(content)
+      ? content.filter((part) => part.type === 'text').map((part) => part.text).join('') : '';
+    if (!raw.trim() || raw.length > 100000) throw new Error('文字模型没有返回有效结果');
+    return raw;
   });
-  if (!response.ok) {
-    throw new Error(({ 401: '文字接口鉴权失败，请检查 Key', 403: '文字模型访问被拒绝', 429: '文字接口限流，请稍后手动重试' })[response.status] || `文字接口请求失败（${response.status}）`);
-  }
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content;
-  const raw = typeof content === 'string' ? content : Array.isArray(content)
-    ? content.filter((part) => part.type === 'text').map((part) => part.text).join('') : '';
-  if (!raw.trim() || raw.length > 100000) throw new Error('文字模型没有返回有效结果');
-  signal?.throwIfAborted();
-  return raw;
 }
 
 export async function requestAssistantAPI(settings, key, messages, options) {

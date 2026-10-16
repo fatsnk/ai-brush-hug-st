@@ -351,6 +351,10 @@ const networkDiagnosticPanel = new NetworkDiagnosticPanel({
   onClose: () => debugToolsPanel.refresh(),
 });
 function networkContext(provider) {
+  if (provider === 'assistant') return {
+    provider, endpoint: state.assistant.endpoint, key: assistantUI.key,
+    error: assistantUI.error || assistantUI.modelsError,
+  };
   return {
     provider, ...state.connections[provider], ...credentials[provider],
     endpoint: provider === 'openai' ? state.openaiEndpoint : credentials[provider].endpoint,
@@ -1987,10 +1991,7 @@ function render(force = false) {
   updateCredentialStatus();
   host.dataset.renderedPage = state.page;
   host.dataset.renderedSurface = config.surface;
-  if (samePage) {
-    host.querySelector('.plugin-content')?.scrollTo(0, scrollTop);
-    host.querySelector('.plugin-nav')?.scrollTo(navScroll, 0);
-  }
+  if (samePage) host.querySelector('.plugin-content')?.scrollTo(0, scrollTop);
   if (!state.enabled) {
     host.querySelectorAll('button[data-action="generate"]').forEach((button) => {
       button.disabled = true;
@@ -2007,6 +2008,8 @@ function render(force = false) {
     floatingMenu.update({ characterTheme: state.characterTheme, theme: config.theme });
   }
   paintIcons();
+  // Icon widths must be final before restoring a horizontally scrolled mobile nav.
+  host.querySelector('.plugin-nav')?.scrollTo({ left: navScroll, top: 0, behavior: 'instant' });
   refreshUpdateNavigation();
   advancedPanel.objectInfo = comfyProbe?.objectInfo;
   advancedPanel.bind(host);
@@ -3412,6 +3415,7 @@ export function mountPlugin(root, next) {
         assistantUI.modelsOpen = false; refreshAssistantModels(); break;
       }
       case 'assistant-models': await fetchAssistantModels(); break;
+      case 'assistant-network': networkDiagnosticPanel.open(networkContext('assistant')); break;
       case 'assistant-apply':
         try { applyAssistantToParameters(); render(); } catch (error) { toast(error.message); } break;
       case 'assistant-copy':

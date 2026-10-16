@@ -20,7 +20,7 @@ export class NetworkDiagnosticPanel {
     dialog.setAttribute('aria-labelledby', 'network-diagnostic-title');
     dialog.innerHTML = `<header><div><h2 id="network-diagnostic-title">当前设备网络检测</h2><p>当前浏览器 → 当前接口</p></div>
       <button type="button" class="ui-icon-button" data-network-action="close" title="关闭" aria-label="关闭网络检测">${icon('x')}</button></header>
-      <div class="network-diagnostic-body"><p class="network-diagnostic-scope">只读检测，不提交生图请求。日志已隐藏秘钥，不会自动发送。</p>
+      <div class="network-diagnostic-body"><p class="network-diagnostic-scope">只读检测，不提交生图或文字生成请求。日志已隐藏秘钥，不会自动发送。</p>
       <p class="network-diagnostic-progress" role="status" aria-live="polite"></p><ol class="network-diagnostic-results"></ol>
       <div class="network-diagnostic-findings"></div>
       <details class="network-diagnostic-log"><summary>${icon('list-checks')}诊断日志</summary>

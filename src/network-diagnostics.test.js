@@ -213,3 +213,38 @@ test('reachable NAI image index with unreadable subscription paths remains a pat
   assert.ok(report.checks.some((row) => row.id === 'nai-images' && row.httpStatus === 200));
   assert.doesNotMatch(report.conclusions.join(' '), /秘钥错误|秘钥无效/);
 });
+
+test('assistant diagnostics use its actual independent endpoint, only GET models and redact credentials and prompts', async () => {
+  const requests = [];
+  const report = await runNetworkDiagnostics({ provider: 'assistant', endpoint: 'https://text.test/private/v1/chat/completions/',
+    key: 'fixture-assistant-secret', error: '文字接口连接失败' }, {
+    environment: environment(),
+    fetcher: async (url, options) => {
+      requests.push({ url, options });
+      return readable(options.headers.Authorization ? 200 : 401);
+    },
+  });
+  assert.equal(report.provider, 'assistant');
+  assert.equal(report.service, '提示词助手 · 独立 API');
+  assert.equal(report.targetCount, 2);
+  const targets = requests.filter((row) => row.url.startsWith('https://text.test'));
+  assert.equal(targets.length, 2);
+  assert.ok(targets.every(({ url, options }) => url === 'https://text.test/private/v1/models'
+    && options.method === 'GET' && !options.body));
+  assert.equal(targets[0].options.headers.Authorization, undefined);
+  assert.equal(targets[1].options.headers.Authorization, 'Bearer fixture-assistant-secret');
+  assert.match(report.note, /当前浏览器直接连接/);
+  assert.match(report.conclusions.join(' '), /不代表.*聊天补全/);
+  assert.doesNotMatch(formatNetworkDiagnostics(report), /fixture-assistant-secret|private response|\/private\/|chat\/completions/);
+});
+
+test('unconfigured assistant diagnostics do not probe other configured image services', async () => {
+  const requests = [];
+  const report = await runNetworkDiagnostics({ provider: 'assistant', endpoint: '', key: 'fixture-assistant-secret' }, {
+    environment: environment(), fetcher: async (url) => { requests.push(url); return readable(); },
+  });
+  assert.equal(report.targetCount, 0);
+  assert.equal(requests.length, 1);
+  assert.ok(requests[0].startsWith('https://tavern.test'));
+  assert.match(report.conclusions.join(' '), /配置尚未准备好/);
+});

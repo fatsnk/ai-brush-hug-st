@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeAssistant, assistantURLs, assistantConnectionSync, assistantModelNames, requestAssistantModels, buildAssistantMessages, parseAssistantResult, applyAssistantPlan, requestAssistantAPI } from './prompt-assistant.js';
+import { normalizeAssistant, assistantURLs, assistantConnectionSync, assistantModelNames, requestAssistantModels, buildAssistantMessages, parseAssistantResult, applyAssistantPlan, requestAssistantAPI, requestAssistantText } from './prompt-assistant.js';
 import { bindSmartSlot, bindingIsCurrent } from './chat.js';
 import { collectAssistantContext, createAssistantHost } from './assistant-host.js';
 import { createCredentialVault } from './credential-vault.js';
@@ -276,6 +276,91 @@ test('text API submits once and does not retry a rate limit or echo remote error
   await assert.rejects(() => requestAssistantAPI({ source: 'api', endpoint: 'https://example.test', model: 'text-model' },
     'fixture-key', [], { fetcher: async () => { calls++; return new Response('secret-error', { status: 429 }); } }), /限流/);
   assert.equal(calls, 1);
+});
+
+const textSettings = { source: 'api', endpoint: 'https://text.test/v1/', model: 'text-model' };
+test('assistant and native Tavern requests work without modern AbortSignal combinators', async (t) => {
+  const descriptors = ['any', 'timeout'].map((name) => [name, Object.getOwnPropertyDescriptor(AbortSignal, name)]);
+  for (const [name] of descriptors) Object.defineProperty(AbortSignal, name, { value: undefined, configurable: true });
+  t.after(() => { for (const [name, descriptor] of descriptors) Object.defineProperty(AbortSignal, name, descriptor); });
+  const controller = new AbortController();
+  const raw = await requestAssistantText(textSettings, 'fixture-key', [], {
+    signal: controller.signal, fetcher: async (url, options) => {
+      assert.equal(url, 'https://text.test/v1/chat/completions');
+      assert.equal(options.credentials, 'omit');
+      assert.equal(JSON.parse(options.body).model, 'text-model');
+      return Response.json({ choices: [{ message: { content: 'fixture text' } }] });
+    },
+  });
+  assert.equal(raw, 'fixture text');
+  const { context, api } = textFixture();
+  const access = createTavernTextAccess({ getContext: () => context, loadAPI: async () => api, document: null,
+    fetcher: async (url) => url.endsWith('/status')
+      ? Response.json({ data: [{ id: 'native-text' }] })
+      : Response.json({ choices: [{ message: { content: 'native text' } }] }),
+  });
+  assert.ok((await access.models({ refresh: true, signal: controller.signal })).models.includes('native-text'));
+  assert.equal(await access.generate([], normalizeAssistant({ tavernModel: 'native-text' }), controller.signal), 'native text');
+});
+
+test('assistant cancellation covers response reading, releases listeners and does not retry', async (t) => {
+  const controller = new AbortController();
+  const added = t.mock.method(controller.signal, 'addEventListener');
+  const removed = t.mock.method(controller.signal, 'removeEventListener');
+  let calls = 0, resolveBody;
+  const pending = requestAssistantText(textSettings, 'fixture-key', [], {
+    signal: controller.signal, fetcher: async () => {
+      calls++;
+      return { ok: true, json: () => new Promise((resolve) => { resolveBody = resolve; }) };
+    },
+  });
+  await Promise.resolve();
+  controller.abort(new DOMException('Fixture cancelled', 'AbortError'));
+  resolveBody({ choices: [{ message: { content: 'must discard' } }] });
+  await assert.rejects(pending, { name: 'AbortError' });
+  assert.equal(calls, 1);
+  assert.equal(removed.mock.calls.length, 1);
+  assert.equal(removed.mock.calls[0].arguments[1], added.mock.calls[0].arguments[1]);
+  await assert.rejects(requestAssistantText(textSettings, 'fixture-key', [], {
+    signal: controller.signal, fetcher: () => { calls++; },
+  }), { name: 'AbortError' });
+  assert.equal(calls, 1);
+});
+
+test('assistant timeout has a readable error and success clears the timeout and abort listener', async (t) => {
+  const nativeTimer = globalThis.setTimeout;
+  t.mock.method(globalThis, 'setTimeout', (callback) => nativeTimer(callback, 1));
+  await assert.rejects(requestAssistantText(textSettings, 'fixture-key', [], {
+    fetcher: async (_url, { signal }) => new Promise((_resolve, reject) =>
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true })),
+  }), (error) => error.name === 'TimeoutError' && /文字接口请求超时/.test(error.message));
+  const cleared = t.mock.method(globalThis, 'clearTimeout');
+  const controller = new AbortController();
+  const removed = t.mock.method(controller.signal, 'removeEventListener');
+  let innerSignal;
+  await requestAssistantText(textSettings, 'fixture-key', [], {
+    signal: controller.signal, fetcher: async (_url, { signal }) => {
+      innerSignal = signal;
+      return Response.json({ choices: [{ message: { content: 'fixture' } }] });
+    },
+  });
+  assert.equal(cleared.mock.calls.length, 1);
+  assert.equal(removed.mock.calls.length, 1);
+  controller.abort();
+  assert.equal(innerSignal.aborted, false);
+});
+
+test('assistant text failures identify network, status and response format without leaking upstream details', async () => {
+  for (const [fetcher, expected] of [
+    [async () => { throw new TypeError('private network detail'); }, /检测助手网络/],
+    [async () => new Response('private detail', { status: 401 }), /鉴权/],
+    [async () => new Response('private detail', { status: 403 }), /被拒绝/],
+    [async () => new Response('private detail', { status: 502 }), /502/],
+    [async () => new Response('<html>private detail</html>'), /返回格式不正确/],
+  ]) {
+    await assert.rejects(requestAssistantText(textSettings, 'fixture-key', [], { fetcher }),
+      (error) => expected.test(error.message) && !error.message.includes('private'));
+  }
 });
 
 test('assistant secret uses independent immutable references and cannot be read as an image key', async () => {

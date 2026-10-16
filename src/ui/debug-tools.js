@@ -4,7 +4,7 @@ import { debugPhaseTitle } from '../debug-errors.js';
 import { runStorageDiagnostics, formatDebugReport } from '../storage-diagnostics.js';
 import '../styles/debug-tools.css';
 
-const PROVIDERS = { novelai: 'NovelAI', openai: 'OpenAI 兼容', comfyui: 'ComfyUI', sdwebui: 'SDWebUI' };
+const PROVIDERS = { novelai: 'NovelAI', openai: 'OpenAI 兼容', comfyui: 'ComfyUI', sdwebui: 'SDWebUI', assistant: '提示词助手 · 独立 API' };
 const command = (glyph, text, action, disabled = false) =>
   `<button type="button" class="ui-button secondary" data-debug-action="${action}" ${disabled ? 'disabled' : ''}>${icon(glyph)}<span>${text}</span></button>`;
 const bytes = (value) => value === null || value === undefined ? '未知' : value < 1024 ? `${value} B`

@@ -3,8 +3,9 @@ import { NOVELAI_SERVICES, NOVELAI_SUBSCRIPTION_URL, normalizeEndpoint, resolveN
 import { openAIURLs } from './ui/openai.js';
 import { normalizeComfyEndpoint } from './ui/comfyui.js';
 import { sdwebuiBase, sdwebuiHeaders } from './sdwebui.js';
+import { assistantURLs } from './prompt-assistant.js';
 
-const PROVIDERS = { novelai: 'NovelAI', openai: 'OpenAI 兼容', comfyui: 'ComfyUI', sdwebui: 'SDWebUI' };
+const PROVIDERS = { novelai: 'NovelAI', openai: 'OpenAI 兼容', comfyui: 'ComfyUI', sdwebui: 'SDWebUI', assistant: '提示词助手 · 独立 API' };
 const ROUTES = ['/user/subscription', '/v1/models', '/models', '/system_stats', '/sdapi/v1/samplers'];
 const localHost = (host) => ['localhost', '127.0.0.1', '[::1]'].includes(host);
 
@@ -67,6 +68,11 @@ export function networkDiagnosticPlan(context) {
         add('nai-custom', '自定义服务 · 只读访问', `${normalizeEndpoint(context.endpoint)}/`);
         note = route.message;
       } else throw new Error(route.message || '请先填写接口秘钥或地址');
+    } else if (context.provider === 'assistant') {
+      const urls = assistantURLs(context.endpoint || '');
+      add('assistant-public', '助手模型列表 · 普通请求', urls.models);
+      add('assistant-auth', '助手模型列表 · 当前认证', urls.models, headers);
+      note = '独立 API 由当前浏览器直接连接，跟随酒馆由酒馆服务器连接，网络与跨域条件可能不同。仅检查助手模型列表，不调用文字或图片生成；模型列表通过不代表聊天补全可用。';
     } else if (context.provider === 'openai') {
       const urls = openAIURLs(context.endpoint, context.path);
       add('openai-public', '模型列表 · 普通请求', urls.models);
@@ -186,6 +192,9 @@ export function diagnosticConclusions(report) {
       && ['network-error', 'timeout', 'csp'].includes(row.outcome))) {
     findings.push('图片域名首页已响应，但订阅路径未取得可读取响应；请核对该路径的代理、跨域或访问限制，首页可达不等于订阅鉴权通过。');
   }
+  if (report.provider === 'assistant') {
+    findings.push('本次检测的是提示词助手独立 API。模型列表可读不代表所选文字模型支持聊天补全；跟随酒馆成功也不代表当前浏览器能直接访问同一接口。');
+  }
   if (/Android|iPhone|iPad|Mobile/i.test(report.environment.userAgent)
     && checks.some((row) => row.id !== 'tavern-page' && row.hostKind === 'loopback')) {
     findings.push('手机访问 localhost 或 127.0.0.1 指向手机自身，请确认填写的是实际服务地址。');
@@ -212,7 +221,7 @@ export async function runNetworkDiagnostics(context, { fetcher = fetch, signal, 
       authMode: authorization?.startsWith('Basic ') ? 'basic' : authorization?.startsWith('Bearer ') ? 'bearer' : 'none',
       containsWhitespace: /\s/.test(context.key?.trim() || ''), containsNonLatin1: /[^\u0000-\u00ff]/.test(context.key || '') },
     previousError: redact(context.error || ''), note: redact(plan.note), status: 'running', checks: [], conclusions: [],
-    limits: '仅在当前浏览器执行 GET 只读检查，不提交生图；不记录秘钥、认证头、响应正文、聊天或完整地址路径；日志不会自动发送。',
+    limits: '仅在当前浏览器执行 GET 只读检查，不提交生图或文字生成；不记录秘钥、认证头、响应正文、聊天或完整地址路径；日志不会自动发送。',
   };
   const policyEvents = [];
   const onPolicy = (event) => {

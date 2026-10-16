@@ -1,4 +1,5 @@
 import { assistantModelNames } from './prompt-assistant.js';
+import { withRequestTimeout } from './request-timeout.js';
 
 const STATUS_SOURCES = new Set(['openai', 'openrouter', 'mistralai', 'custom', 'cohere', 'chutes',
   'electronhub', 'nanogpt', 'deepseek', 'xai', 'aimlapi', 'pollinations', 'groq', 'moonshot',
@@ -33,13 +34,14 @@ export function createTavernTextAccess({ getContext, fetcher = fetch,
     if (refresh && STATUS_SOURCES.has(source)) {
       const body = { chat_completion_source: source };
       for (const key of STATUS_FIELDS) if (typeof settings[key] === 'string') body[key] = settings[key];
-      const response = await fetcher('/api/backends/chat-completions/status', {
-        method: 'POST', headers: context.getRequestHeaders(), credentials: 'same-origin', cache: 'no-store',
-        body: JSON.stringify(body), signal: signal
-          ? AbortSignal.any([signal, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000),
+      const data = await withRequestTimeout(signal, 15000, '酒馆模型列表读取超时，请手动重试', async (requestSignal) => {
+        const response = await fetcher('/api/backends/chat-completions/status', {
+          method: 'POST', headers: context.getRequestHeaders(), credentials: 'same-origin', cache: 'no-store',
+          body: JSON.stringify(body), signal: requestSignal,
+        });
+        if (!response.ok) throw new Error(`酒馆模型列表读取失败（${response.status}）`);
+        return response.json();
       });
-      if (!response.ok) throw new Error(`酒馆模型列表读取失败（${response.status}）`);
-      const data = await response.json();
       if (data.error) throw new Error('酒馆模型列表读取失败，请检查酒馆接口连接');
       const received = assistantModelNames(data);
       if (received.length) list = assistantModelNames([...received, current].filter(Boolean));
@@ -69,13 +71,14 @@ export function createTavernTextAccess({ getContext, fetcher = fetch,
     delete body.tools;
     delete body.tool_choice;
     signal?.throwIfAborted();
-    const response = await fetcher('/api/backends/chat-completions/generate', {
-      method: 'POST', headers: context.getRequestHeaders(), credentials: 'same-origin', cache: 'no-store',
-      body: JSON.stringify(body), signal: signal
-        ? AbortSignal.any([signal, AbortSignal.timeout(options.timeout * 1000)]) : AbortSignal.timeout(options.timeout * 1000),
+    const data = await withRequestTimeout(signal, options.timeout * 1000, '酒馆文字请求超时，请手动重试', async (requestSignal) => {
+      const response = await fetcher('/api/backends/chat-completions/generate', {
+        method: 'POST', headers: context.getRequestHeaders(), credentials: 'same-origin', cache: 'no-store',
+        body: JSON.stringify(body), signal: requestSignal,
+      });
+      if (!response.ok) throw new Error(`酒馆文字请求失败（${response.status}）`);
+      return response.json();
     });
-    if (!response.ok) throw new Error(`酒馆文字请求失败（${response.status}）`);
-    const data = await response.json();
     if (data.error) throw new Error('酒馆文字接口返回错误，请检查模型权限');
     const content = typeof api.getStreamingReply === 'function'
       ? api.getStreamingReply(data, {}, { chatCompletionSource: settings.chat_completion_source, overrideShowThoughts: false })

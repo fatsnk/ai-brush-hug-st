@@ -104,6 +104,7 @@ export function renderAssistant(state, ui) {
         </div>
         <p class="assistant-context" data-assistant-model-status role="status">${esc(ui.modelsStatus || '')}</p>
         <p class="assistant-error" data-assistant-model-error role="alert" ${ui.modelsError ? '' : 'hidden'}>${esc(ui.modelsError || '')}</p>
+        ${a.source === 'api' ? `<div class="assistant-actions">${command('assistant-network', 'scan', '检测助手网络')}</div>` : ''}
         <div class="assistant-grid">${number('maxTokens', '最大输出 Token', a.maxTokens, 256, 8192)}${number('timeout', '超时（秒）', a.timeout, 15, 300)}</div>
         <div class="settings-band-heading"><h2>${icon('message-square')}上下文</h2></div>
         <div class="assistant-grid">${number('contextMessages', '最近消息数', a.contextMessages, 1, 40)}${number('contextCharacters', '聊天字符上限', a.contextCharacters, 2000, 60000)}</div>
