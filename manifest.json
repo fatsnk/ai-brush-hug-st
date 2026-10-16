@@ -4,9 +4,9 @@
   "requires": [],
   "optional": [],
   "dependencies": [],
-  "js": "dist/index.js?ver=0.23.3&build=20261016-nai-connection-r1",
+  "js": "dist/index.js?ver=0.24.0&build=20261016-debug-tools-r1",
   "author": "小波",
-  "version": "0.23.3",
+  "version": "0.24.0",
   "auto_update": false,
   "minimum_client_version": "1.12.13"
 }

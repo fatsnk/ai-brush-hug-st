@@ -1,3 +1,4 @@
+import { randomUUID } from '../crypto-compat.js';
 import { escapeHtml as esc } from '../config.js';
 import { icon, paintIcons } from '../icons.js';
 import { PROFILE_AI_FIELDS, manualProfileSource, buildProfileMessages, parseProfileResult, profileProposal, applyProfileDrafts } from '../profile-ai.js';
@@ -200,7 +201,7 @@ export class ProfileAIPanel {
     }
     if (action === 'outfit-add') {
       const draft = ui.rows[ui.index].draft;
-      if (draft.outfits.length < 20) draft.outfits.push({ id: crypto.randomUUID(), name: '新服装', prompt: '' });
+      if (draft.outfits.length < 20) draft.outfits.push({ id: randomUUID(), name: '新服装', prompt: '' });
       this.render(); return;
     }
     if (action === 'outfit-delete') {

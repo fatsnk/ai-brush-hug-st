@@ -41,7 +41,7 @@ async function boot() {
   });
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape' || document.getElementById('overlay-root').childElementCount
-      || document.querySelector('.tag-picker[open], .profile-ai-dialog[open], .novelai-processing-dialog[open]')) return;
+      || document.querySelector('.tag-picker[open], .profile-ai-dialog[open], .novelai-processing-dialog[open], .network-diagnostic-dialog[open]')) return;
     event.preventDefault();
     window.parent.postMessage({ type: 'linghuashi:close' }, location.origin);
   }, true);

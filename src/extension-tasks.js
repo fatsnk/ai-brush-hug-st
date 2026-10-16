@@ -1,3 +1,4 @@
+import { randomUUID } from './crypto-compat.js';
 import { EXTENSION_API_VERSION, apiError, externalSource, extensionDigest, extensionMetadata,
   extensionTaskId, normalizeExtensionOptions, publicExtensionTask } from './extension-api.js';
 
@@ -14,7 +15,7 @@ export function createExtensionTaskService({ queue, ready, refresh, state, prepa
   }
   async function submit(source, input, signal) {
     const options = normalizeExtensionOptions(input);
-    const requestId = options.requestId || crypto.randomUUID();
+    const requestId = options.requestId || randomUUID();
     delete options.requestId;
     const fingerprint = await extensionDigest(options);
     const id = await extensionTaskId(source, requestId);

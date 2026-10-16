@@ -1,3 +1,4 @@
+import { randomUUID } from './crypto-compat.js';
 const number = (value, fallback, min = 0, max = 1) => Number.isFinite(Number(value)) ? Math.max(min, Math.min(max, Number(value))) : fallback;
 const record = (value) => value && typeof value === 'object' && !Array.isArray(value);
 const base64OK = (value) => typeof value === 'string' && value.length > 0 && value.length <= 6 * 1024 * 1024 && /^[A-Za-z0-9+/]+={0,2}$/.test(value);
@@ -158,7 +159,7 @@ export async function applyNovelAIAdvanced(body, snapshot, readBase64) {
     }
   } else if (advanced.mode === 'reference') {
     if (advanced.referenceKind === 'character') {
-      parameters.director_reference_images_cached = [{ cache_secret_key: crypto.randomUUID(), data: await readBase64(advanced.character) }];
+      parameters.director_reference_images_cached = [{ cache_secret_key: randomUUID(), data: await readBase64(advanced.character) }];
       parameters.director_reference_descriptions = [{ caption: {
         base_caption: advanced.characterStyle ? 'character&style' : 'character', char_captions: [],
       }, use_coords: false, use_order: true }];
@@ -176,7 +177,7 @@ export async function applyNovelAIAdvanced(body, snapshot, readBase64) {
         parameters.reference_image_multiple = await Promise.all(entries.map((entry) => readBase64(entry.image)));
         parameters.reference_information_extracted_multiple = entries.map((entry) => entry.information);
       } else parameters.reference_image_multiple_cached = await Promise.all(entries.map(async (entry) => ({
-        cache_secret_key: crypto.randomUUID(), data: await readBase64(entry.encodings[key].asset),
+        cache_secret_key: randomUUID(), data: await readBase64(entry.encodings[key].asset),
       })));
     }
   }

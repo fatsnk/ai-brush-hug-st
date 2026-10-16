@@ -1,3 +1,5 @@
+import { randomUUID } from './crypto-compat.js';
+import { rememberGenerationFailure } from './debug-errors.js';
 import JSZip from 'jszip';
 import { sdwebuiImages, watchSDWebUIProgress } from './sdwebui.js';
 
@@ -155,21 +157,25 @@ export function buildNovelAIRequest(params, characterPrompts = []) {
 
 export async function submitGeneration(job, fetcher = fetch) {
   if (job.execution) return;
+  job.failurePhase = 'preparing';
   const plan = job.plan;
   let payload = job.preparePayload ? await job.preparePayload() : plan.body;
   if (plan.provider === 'sdwebui' && plan.sdTaskIdSupported) payload = { ...payload, force_task_id: `task(linghuashi-${job.id})` };
   job.controller.signal.throwIfAborted();
+  job.failurePhase = 'task-state';
   await job.checkpoint?.({ stage: 'submitting' });
   job.controller.signal.throwIfAborted();
   const multipart = typeof FormData !== 'undefined' && payload instanceof FormData;
   const stopProgress = watchSDWebUIProgress(job, fetcher);
   let response;
   try {
+    job.failurePhase = 'submitting';
     response = await request(job, plan.url, {
       method: 'POST', headers: { ...(!multipart ? { 'Content-Type': 'application/json' } : {}), ...plan.headers },
       body: multipart ? payload : JSON.stringify(payload),
     }, fetcher);
   } finally { stopProgress(); }
+  job.failurePhase = 'retrieving';
   if (plan.provider === 'comfyui') {
     const body = await jsonResponse(response);
     if (typeof body.prompt_id !== 'string' || !body.prompt_id
@@ -181,6 +187,7 @@ export async function submitGeneration(job, fetcher = fetch) {
     // Retain the accepted response for a download/storage retry without another billable POST.
     job.execution = { bytes: await readLimited(response) };
   }
+  job.failurePhase = 'response-cache';
   await job.persistExecution?.();
 }
 
@@ -330,7 +337,7 @@ export class GenerationQueue {
     }
     this.jobs = this.jobs.filter((job, index) => ACTIVE.has(job.status) || index >= this.jobs.length - 49);
     const job = {
-      id: options.id || crypto.randomUUID(), plan, status: 'queued', phase: 'waiting',
+      id: options.id || randomUUID(), plan, status: 'queued', phase: 'waiting',
       createdAt: Date.now(), attempts: 0, stage: 'waiting', controller: new AbortController(),
     };
     job.notify = () => this.changed();
@@ -431,12 +438,14 @@ export class GenerationQueue {
     )), job.plan.timeout * 1000);
     try {
       if (this.persistence) {
+        job.failurePhase = 'task-state';
         const claim = await this.persistence.claim(job);
         if (claim.busy) {
           busy = true; job.status = this.pausedBatches.has(job.plan.snapshot?.experiment?.id) ? 'paused' : 'queued';
           job.phase = 'waiting'; return;
         }
         timeout = startTimeout();
+        job.failurePhase = 'response-cache';
         await this.persistence.hydrate(job);
       } else timeout = startTimeout();
       await this.run(job);
@@ -447,10 +456,8 @@ export class GenerationQueue {
       if (job.status !== 'cancelled') {
         job.status = 'failed';
         const reason = failure;
-        job.error = reason instanceof TypeError ? '网络请求失败，请检查 HTTPS、跨域和服务地址'
-          : reason instanceof GenerationError ? reason.message
-            : this.persistence && !job.plan.headers?.Authorization && job.plan.keyRef ? '原任务秘钥无法读取，请在原设备恢复该秘钥'
-              : '生成或保存失败，请检查图片存储空间后重试';
+        job.diagnostic = rememberGenerationFailure(reason, job, reason instanceof GenerationError);
+        job.error = job.diagnostic.message;
         job.httpStatus = reason?.status || 0;
         if (reason?.cooldown) this.nextStart = Math.max(this.nextStart, Date.now() + reason.cooldown);
       }
@@ -458,7 +465,8 @@ export class GenerationQueue {
       clearTimeout(timeout);
       if (this.persistence && job.durable) {
         try { await this.persistence.finish(job, failure); }
-        catch {
+        catch (error) {
+          rememberGenerationFailure(error, { ...job, failurePhase: 'task-state' });
           clearInterval(job.heartbeat);
           delete job.durable;
           job.error = job.saved ? '图片已保存，任务状态待同步，请刷新记录' : '任务状态待同步，请刷新记录后核对';

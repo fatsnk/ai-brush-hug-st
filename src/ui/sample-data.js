@@ -15,6 +15,7 @@ export const navigation = [
   { id: 'generate', title: '生图工坊', icon: 'wand-sparkles' },
   { id: 'gallery', title: '绘图管理', icon: 'images' },
   { id: 'components', title: '扩展组件', icon: 'plug' },
+  { id: 'debug', title: '调试工具', icon: 'scan' },
   { id: 'changelog', title: '更新日志', icon: 'history' },
 ];
 

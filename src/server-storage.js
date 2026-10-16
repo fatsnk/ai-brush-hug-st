@@ -5,28 +5,32 @@ import { BACKUP_ACTIONS } from '../server/linghuashi-storage/backup-records.mjs'
 import { createNativeStorage } from './native-storage.js';
 import { createBrowserTaskRequest } from './task-persistence.js';
 export const STORAGE_ACTIONS = new Set(['list', 'image/get', 'version/select', 'policy', 'cleanup', 'add', 'favorite', 'remove', 'audit',
-  'chat/list', 'chat/get', 'chat/reserve', 'chat/update', 'components/status', ...TASK_ACTIONS, ...REFERENCE_ACTIONS, ...BACKUP_ACTIONS]);
+  'chat/list', 'chat/get', 'chat/reserve', 'chat/update', 'components/status', 'diagnostics/status', ...TASK_ACTIONS, ...REFERENCE_ACTIONS, ...BACKUP_ACTIONS]);
 
 export function createStorageRequest(getHeaders, { account = 'default-user', request = fetch, browserTasks, locks, now } = {}) {
   async function api(url, body, { missing = false } = {}) {
     const headers = getHeaders();
     if (!headers) throw new Error('酒馆请求验证尚未就绪');
-    const response = await request(url, {
-      method: 'POST', headers, body: JSON.stringify(body), credentials: 'same-origin',
-      cache: 'no-store', signal: AbortSignal.timeout(120000),
-    });
+    let response;
+    try {
+      response = await request(url, {
+        method: 'POST', headers, body: JSON.stringify(body), credentials: 'same-origin',
+        cache: 'no-store', signal: AbortSignal.timeout(120000),
+      });
+    } catch (error) { error.scope = 'tavern-storage'; throw error; }
     if (!response.ok) {
       if (missing && response.status === 404) return null;
       const result = await response.json().catch(() => ({}));
       throw Object.assign(new Error(result.error || (response.status === 403
-        ? '当前账号没有此存储组件的访问权限' : '酒馆服务器存储请求失败，请重试')), { status: response.status });
+        ? '当前账号没有此存储组件的访问权限' : '酒馆服务器存储请求失败，请重试')), { status: response.status, scope: 'tavern-storage' });
     }
     const text = await response.text();
     try { return text ? JSON.parse(text) : {}; } catch { return {}; }
   }
   const enhanced = (action, body = {}, options) => api(`${BASE}/${action}`, body, options);
   const native = createNativeStorage({ api, account, locks, now,
-    read: (path) => request(`/${path}?account=${encodeURIComponent(account)}`, { credentials: 'same-origin', cache: 'no-cache', signal: AbortSignal.timeout(120000) }) });
+    read: (path) => request(`/${path}?account=${encodeURIComponent(account)}`, { credentials: 'same-origin', cache: 'no-cache', signal: AbortSignal.timeout(120000) })
+      .catch((error) => { error.scope = 'tavern-storage'; throw error; }) });
   let discovery, tasks;
   const localTasks = (action, body) => {
     tasks ||= browserTasks || createBrowserTaskRequest(`linghuashi-tasks-v1:st:${encodeURIComponent(account)}`);
@@ -74,6 +78,13 @@ export function createStorageRequest(getHeaders, { account = 'default-user', req
       } catch (error) {
         return { native: true, enhanced: error.status === 403 ? 'denied' : 'error', error: error.message };
       }
+    }
+    if (action === 'diagnostics/status') {
+      const summary = await native(action);
+      const status = await component(true).catch((error) => ({ unavailable: true, status: error.status || 0 }));
+      return { ...summary, enhanced: status?.restricted ? 'denied' : status?.unavailable ? 'error' : status ? 'installed' : 'missing',
+        componentVersion: typeof status?.version === 'string' ? status.version : '', componentProtocol: status?.protocol || 0,
+        componentHttpStatus: status?.status || 0, taskStorage: status && !status.restricted && !status.unavailable ? 'server' : 'browser' };
     }
     const detected = await component(), available = detected?.restricted ? null : detected;
     if (TASK_ACTIONS.includes(action)) {

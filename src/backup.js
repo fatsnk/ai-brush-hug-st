@@ -1,3 +1,4 @@
+import { randomUUID, sha256Hex, requireBackupCrypto } from './crypto-compat.js';
 import JSZip from 'jszip';
 import { RELEASE } from './release.js';
 import { backupSize, cloneBackup, scrubBackup, normalizeBackupConfig, portableCredentials, referencedAssets } from './backup-config.js';
@@ -8,8 +9,7 @@ export const BACKUP_LIMIT = 200 * 1024 * 1024;
 const MAX_MANIFEST = 16 * 1024 * 1024;
 const MAGIC = new TextEncoder().encode('LHBK1');
 const sameBytes = (a, b) => a.length === b.length && a.every((value, index) => value === b[index]);
-export const backupHash = async (bytes) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))]
-  .map((byte) => byte.toString(16).padStart(2, '0')).join('');
+export const backupHash = sha256Hex;
 export const backupIdentity = (account, origin) => backupHash(new TextEncoder().encode(`${origin}\n${account}`));
 
 function readEntry(entry, limit) {
@@ -34,6 +34,7 @@ function readEntry(entry, limit) {
 }
 
 async function passwordKey(password, salt, iterations) {
+  requireBackupCrypto();
   if (typeof password !== 'string' || password.length < 8 || password.length > 1024) throw new Error('备份密码需为 8 至 1024 个字符');
   const material = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
   return crypto.subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, material,
@@ -41,6 +42,7 @@ async function passwordKey(password, salt, iterations) {
 }
 
 export async function encryptBackup(bytes, password) {
+  requireBackupCrypto();
   const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12)), iterations = 600000;
   const header = new TextEncoder().encode(JSON.stringify({ algorithm: 'AES-256-GCM', kdf: 'PBKDF2-SHA256', iterations,
     salt: assetBase64(salt), iv: assetBase64(iv) }));
@@ -53,6 +55,7 @@ export async function encryptBackup(bytes, password) {
 export function isEncryptedBackup(bytes) { return sameBytes(bytes.subarray(0, MAGIC.length), MAGIC); }
 
 export async function decryptBackup(bytes, password) {
+  requireBackupCrypto();
   if (!isEncryptedBackup(bytes) || bytes.length < MAGIC.length + 4) throw new Error('加密备份格式无效');
   const length = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(MAGIC.length);
   const offset = MAGIC.length + 4 + length;
@@ -197,7 +200,7 @@ export async function inspectBackup(file, password = '') {
 
 export function remapBackupImages(rows, existing, preserveChat) {
   const ids = new Set(existing.map((row) => row.id)), mapping = new Map();
-  for (const row of rows) mapping.set(row.id, ids.has(row.id) ? crypto.randomUUID() : row.id);
+  for (const row of rows) mapping.set(row.id, ids.has(row.id) ? randomUUID() : row.id);
   return { mapping, rows: rows.map((row) => ({ ...row, id: mapping.get(row.id),
     chatBinding: preserveChat ? row.chatBinding : null,
     version: { ...row.version, groupId: mapping.get(row.version.groupId) || row.version.groupId,

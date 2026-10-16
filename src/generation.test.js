@@ -254,6 +254,27 @@ test('manual recovery retains accepted execution, failed POST is never retried',
   assert.equal(current.execution, undefined);
 });
 
+test('quota failure preserves the accepted response for manual saving without another generation', async () => {
+  let posts = 0, saves = 0;
+  const queue = new GenerationQueue({
+    settings: () => ({ enabled: true, generationMode: 'queue', queueInterval: 0 }),
+    run: async (current) => {
+      if (!current.execution) { posts++; current.execution = { bytes: png }; }
+      current.failurePhase = 'saving';
+      if (++saves === 1) throw new DOMException('private', 'QuotaExceededError');
+    },
+  });
+  const current = queue.add(plan());
+  await eventually(() => current.status === 'failed');
+  assert.equal(current.diagnostic.code, 'BROWSER_QUOTA');
+  assert.equal(current.diagnostic.phase, 'saving');
+  assert.ok(current.execution);
+  queue.retry(current.id);
+  await eventually(() => current.status === 'completed');
+  assert.equal(posts, 1);
+  assert.equal(saves, 2);
+});
+
 test('429 cooldown pauses later queued tasks without automatically replaying failed one', async () => {
   const starts = [];
   const settings = { enabled: true, generationMode: 'queue', queueInterval: 0 };

@@ -1,3 +1,4 @@
+import { randomUUID } from '../crypto-compat.js';
 import { escapeHtml, downloadJson } from '../config.js';
 import { assistantHostRequest, credentialRequest, currentAccount, currentChat, extensionChatRequest, isInstalled, persistUIState, readUIState, storageKey, storageRequest } from '../runtime.js';
 import { readBrowserCache, writeBrowserCache } from '../browser-cache.js';
@@ -18,6 +19,8 @@ import { ChangelogPanel } from './changelog.js';
 import { ComponentsPanel } from './components.js';
 import { ReleasePanel } from './release-panel.js';
 import { NetworkDiagnosticPanel } from './network-diagnostics.js';
+import { DebugToolsPanel } from './debug-tools.js';
+import { recentGenerationFailures } from '../debug-errors.js';
 import '../styles/network-diagnostics.css';
 import { ReferenceAssets, normalizeReferenceImage, assetBase64 } from '../reference-assets.js';
 import { advancedOf, validateAdvanced, encodeVibe } from '../advanced-generation.js';
@@ -344,13 +347,17 @@ function openPromptTools(target, input, visual = false) {
 let keyVisible = false;
 let connectionStatus = { message: '等待输入秘钥', tone: 'neutral' };
 const networkDiagnosticPanel = new NetworkDiagnosticPanel({
-  context: () => ({
-    provider: state.provider, ...state.connections[state.provider], ...credentials[state.provider],
-    endpoint: state.provider === 'openai' ? state.openaiEndpoint : credentials[state.provider].endpoint,
-    path: state.openaiPath, error: connectionStatus.tone === 'error' ? connectionStatus.message : '',
-  }),
+  context: () => networkContext(state.provider),
+  onClose: () => debugToolsPanel.refresh(),
 });
-window.addEventListener('pagehide', () => networkDiagnosticPanel.close());
+function networkContext(provider) {
+  return {
+    provider, ...state.connections[provider], ...credentials[provider],
+    endpoint: provider === 'openai' ? state.openaiEndpoint : credentials[provider].endpoint,
+    path: state.openaiPath, error: provider === state.provider && connectionStatus.tone === 'error' ? connectionStatus.message : '',
+  };
+}
+window.addEventListener('pagehide', () => { networkDiagnosticPanel.close(); debugToolsPanel.stop(); });
 let resolvedService = null;
 let connectionController;
 let connectionTimer;
@@ -471,7 +478,7 @@ const workbenchPanel = new WorkbenchPanel({
   saveCandidate: (name, row, preview) => {
     if (!row.candidate) throw new Error('候选组合不存在，请重新预览');
     const previous = state.artistLibrary;
-    state.artistLibrary = saveArtist(previous, { id: crypto.randomUUID(), name, category: '画风探索',
+    state.artistLibrary = saveArtist(previous, { id: randomUUID(), name, category: '画风探索',
       ...row.candidate, target: preview.rows[0].snapshot.provider });
     try { persist(); } catch (error) { state.artistLibrary = previous; throw error; }
   },
@@ -901,7 +908,7 @@ function updateTriggerFormat() {
 
 function resultMedia(chat = false) {
   const job = taskQueue.jobs.find((item) => item.id === activeJobId);
-  if (runtimeState === 'error') return `<div class="result-placeholder result-error">${chibi('sad', 'status-mascot')}<strong>生成失败</strong><span>${esc(job?.error || '服务暂时没有响应')}</span>${job?.execution ? button('download', '继续取图 / 保存', 'task-retry', 'secondary', `data-task="${job.id}"`) : button('refresh-cw', '重新生成', 'generate', 'secondary')}</div>`;
+  if (runtimeState === 'error') return `<div class="result-placeholder result-error">${chibi('sad', 'status-mascot')}<strong>生成失败</strong><span>${esc(job?.error || '服务暂时没有响应')}</span>${job?.execution ? button('download', '继续取图 / 保存', 'task-retry', 'secondary', `data-task="${job.id}"`) : button('refresh-cw', '重新生成', 'generate', 'secondary')}${button('scan', '打开调试工具', 'debug-tools', 'secondary')}</div>`;
   if (runtimeState === 'queued' || runtimeState === 'generating') {
     const previous = activeDrawing();
     const task = job || { status: runtimeState === 'queued' ? 'queued' : 'running', phase: 'submitting' };
@@ -992,7 +999,7 @@ function renderConnection() {
       ${state.provider === 'sdwebui' ? '' : '<p class="credential-status" data-credential-status role="status" aria-live="polite"></p>'}
       ${novelai ? `<div class="connection-help" id="novelai-key-help"><p>支持自动识别官方秘钥(pst-xxxx)和部分第三方秘钥(常用为sk-xxxx)</p><p>支持蛋糕生图、砂糖绘画；砂糖同时支持 STD 开头的秘钥。</p></div>
       <details class="advanced-options endpoint-options" ${addressExpanded ? 'open' : ''}><summary>${icon('link')}第三方接口地址(可选)${icon('chevron-down')}</summary><div>${field('第三方接口地址(可选)', `<input type="url" autocomplete="off" data-transient="endpoint" placeholder="https://第三方域名" value="${esc(current.endpoint)}" />`)}<p class="endpoint-help">留空自动识别；填写后优先用于第三方秘钥。pst- 秘钥始终使用官方接口。</p></div></details>` : ''}
-      <div class="connection-actions" ${openai ? 'data-openai-connection-actions' : ''}><span id="connection-status" data-connection-status role="status" aria-live="polite"></span><div class="connection-buttons">${button('scan', '检测当前设备网络', 'network-diagnostics', 'secondary', 'hidden')}${button('plug', '测试连接', 'test-connection', 'secondary')}</div></div>
+      <div class="connection-actions" ${openai ? 'data-openai-connection-actions' : ''}><span id="connection-status" data-connection-status role="status" aria-live="polite"></span><div class="connection-buttons">${button('scan', '打开调试工具', 'network-diagnostics', 'secondary', 'hidden')}${button('plug', '测试连接', 'test-connection', 'secondary')}</div></div>
       <p class="resolved-endpoint" data-resolved-endpoint></p>
       ${advancedPanel.html()}
       ${novelai ? `<div class="section-rule"></div>${renderNovelAIParameters(state, novelaiAdvancedOpen)}` : ''}
@@ -1772,6 +1779,23 @@ const releasePanel = new ReleasePanel({
 });
 const changelogPanel = new ChangelogPanel(releasePanel);
 const componentsPanel = new ComponentsPanel();
+const debugToolsPanel = new DebugToolsPanel({
+  provider: state.provider, network: networkDiagnosticPanel, networkContext, failures: recentGenerationFailures,
+  storageContext: () => {
+    const params = state.provider === 'comfyui' ? state.comfyui.params : state[state.provider];
+    return {
+      storageLocation: state.cacheLocation, configCacheAvailable,
+      runtime: { running: taskQueue.running, queued: taskQueue.jobs.filter((row) => row.status === 'queued').length,
+        generationMode: state.generationMode, concurrency: state.concurrency, width: params?.width, height: params?.height, samples: params?.nSamples || params?.n || 1 },
+      databases: [
+        { id: 'drawings', name: storageKey('linghuashi-drawings-v1'), stores: ['drawings', 'meta'] },
+        { id: 'tasks', name: storageKey('linghuashi-tasks-v1'), stores: ['tasks'] },
+        { id: 'references', name: storageKey(`linghuashi-references-${currentAccount()}`), stores: ['assets'] },
+      ],
+      ...(isInstalled() ? { serverStatus: () => storageRequest('diagnostics/status') } : {}),
+    };
+  },
+});
 
 function refreshUpdateNavigation() {
   const button = host?.querySelector('.plugin-nav > button[data-page="changelog"]');
@@ -1789,7 +1813,7 @@ function refreshUpdateNavigation() {
 }
 
 function renderConsole() {
-  const renderer = { settings: () => renderSettings(state, backupPanel.html()), assistant: () => renderAssistant(state, assistantUI), generate: renderGenerate, batch: () => workbenchPanel.html() + renderTasks(), connection: renderConnection, characters: renderCharacters, styles: renderStyles, tags: () => tagPanel.html(), gallery: renderGallery, components: () => componentsPanel.html(), changelog: () => changelogPanel.html() }[state.page] || (() => renderSettings(state, backupPanel.html()));
+  const renderer = { settings: () => renderSettings(state, backupPanel.html()), assistant: () => renderAssistant(state, assistantUI), generate: renderGenerate, batch: () => workbenchPanel.html() + renderTasks(), connection: renderConnection, characters: renderCharacters, styles: renderStyles, tags: () => tagPanel.html(), gallery: renderGallery, components: () => componentsPanel.html(), debug: () => debugToolsPanel.html(), changelog: () => changelogPanel.html() }[state.page] || (() => renderSettings(state, backupPanel.html()));
   const navigationPage = state.page === 'batch' ? 'generate' : state.page;
   const busy = ['queued', 'generating'].includes(runtimeState);
   const sessionName = isInstalled() ? esc(currentChat().name) : '林间的旅人';
@@ -1893,6 +1917,7 @@ function render(force = false) {
   backupPanel.bind(host);
   changelogPanel.bind(host);
   componentsPanel.bind(host);
+  debugToolsPanel.bind(host);
   tagPanel.bind(host);
   workbenchPanel.bind(host);
   attachPromptTagButtons(host, openPromptTools);
@@ -1943,7 +1968,7 @@ export function showPage(page) {
     host?.querySelector('[data-release-fold]')?.scrollIntoView({ block: 'start' });
     return;
   }
-  if (!['settings', 'generate', 'batch', 'gallery', 'assistant', 'characters', 'styles', 'tags', 'connection', 'components', 'changelog'].includes(page)) return;
+  if (!['settings', 'generate', 'batch', 'gallery', 'assistant', 'characters', 'styles', 'tags', 'connection', 'components', 'debug', 'changelog'].includes(page)) return;
   if (page === 'changelog' && releasePanel.hasUpdate) releasePanel.open = true;
   state.page = page;
   persist(); render();
@@ -2580,7 +2605,7 @@ async function prepareGenerationPlan(snapshot, credential, connection, imageEdit
     url = `${base}/prompt`;
     const config = structuredClone(snapshot.config);
     if (advanced.mode !== 'text' && config.mapping.image) config.params.image = 'reference.png';
-    body = { prompt: applyWorkflowParameters(config), client_id: crypto.randomUUID() };
+    body = { prompt: applyWorkflowParameters(config), client_id: randomUUID() };
     outputNode = snapshot.config.outputNode;
   }
   return {
@@ -2603,14 +2628,20 @@ async function runGeneration(job) {
       job.status = 'cancelled';
       throw new GenerationError('原聊天或提示词已变化，任务已取消');
     }
+    job.failurePhase = 'preparing';
     job.preparePayload = () => prepareAdvancedPayload(job, referenceAssets);
     await submitGeneration(job);
+    job.failurePhase = 'retrieving';
     job.phase = 'retrieving'; job.notify();
-    const received = await finishAdvancedImages(job, await downloadResults(job), referenceAssets);
+    const downloaded = await downloadResults(job);
+    job.failurePhase = 'image-processing';
+    const received = await finishAdvancedImages(job, downloaded, referenceAssets);
     const results = job.plan.imageEdit && !job.plan.snapshot.novelaiProcessing ? received.slice(0, 1) : received;
     job.controller.signal.throwIfAborted();
     job.phase = 'saving'; job.notify();
+    job.failurePhase = 'task-state';
     await job.checkpoint?.({ stage: 'saving', imageCount: results.length });
+    job.failurePhase = 'image-processing';
     if (!job.rows) {
       const rows = [];
       for (const [index, result] of results.entries()) {
@@ -2640,6 +2671,7 @@ async function runGeneration(job) {
     }
     if (job.plan.provider === 'openai') generationVerified = job.plan.identity;
     job.controller.signal.throwIfAborted();
+    job.failurePhase = 'saving';
     if (!job.plan.imageEdit) await cleanupDrawings();
     await drawingLibrary.add(job.rows, job.plan.storageLocation, { requestId: job.plan.chatRequestId });
     job.saved = true; job.imageCount = job.rows.length;
@@ -2649,6 +2681,7 @@ async function runGeneration(job) {
   if (job.plan.provider === 'openai' && state.provider === 'openai' && openAIGenerationVerified()) {
     connectionStatus = { message: '图片已返回 · 生图已验证', tone: 'success' };
   }
+  job.failurePhase = 'refreshing';
   await reloadDrawings();
   if (job.plan.imageEdit) notifyImagesChanged();
   toast(`已${job.plan.snapshot.novelaiProcessing ? '处理' : '生成'}并保存 ${job.imageCount} 张图片`);
@@ -2680,7 +2713,7 @@ function reportChatTask(job) {
 
 async function validateChatRequest(request) {
   if (!request || request.controller.signal.aborted || !state.enabled) return false;
-  const validationId = crypto.randomUUID();
+  const validationId = randomUUID();
   return new Promise((resolve) => {
     const finish = (valid) => {
       clearTimeout(timer);
@@ -3068,7 +3101,7 @@ async function enqueueBatch(preview) {
   const credential = { ...credentials[provider] };
   const connection = provider === 'sdwebui' ? structuredClone(state.connections.sdwebui)
     : { endpoint: state.openaiEndpoint, path: state.openaiPath, timeout: state.openaiTimeout };
-  const groupId = crypto.randomUUID(), createdAt = Date.now();
+  const groupId = randomUUID(), createdAt = Date.now();
   if (advancedOf(preview.rows[0].snapshot).mode === 'inpaint' && advancedPanel.ui.dirty) throw new Error('蒙版有未保存修改，请回生图工坊保存后重新预览');
   await advancedPanel.beforeGenerate();
   if (storageLocation === 'server') await drawingLibrary.list('server');
@@ -3232,7 +3265,7 @@ export function mountPlugin(root, next) {
         break;
       case 'artist-new': case 'artist-capture': case 'artist-copy':
         if (!discardArtistChanges()) break;
-        if (target.dataset.action === 'artist-copy') artistDraft({ ...artistUI.draft, id: crypto.randomUUID(), name: `${artistUI.draft?.name || '画风'} 副本`.slice(0, 40) });
+        if (target.dataset.action === 'artist-copy') artistDraft({ ...artistUI.draft, id: randomUUID(), name: `${artistUI.draft?.name || '画风'} 副本`.slice(0, 40) });
         else if (target.dataset.action === 'artist-capture') {
           const params = state.provider === 'comfyui' ? state.comfyui.params : state[state.provider];
           artistDraft({ ...emptyArtist(), target: state.provider, artist: state.provider === 'comfyui' ? params.positive : params.artist, negative: params.negative });
@@ -3474,7 +3507,8 @@ export function mountPlugin(root, next) {
       case 'random-seed': state.seed = Math.floor(Math.random() * 1000000000); persist(); render(); break;
       case 'organize': state.prompt = [...new Set(state.prompt.split(',').map((tag) => tag.trim()).filter(Boolean))].join(', '); persist(); render(); toast('提示词已整理'); break;
       case 'test-connection': checkConnection(true); break;
-      case 'network-diagnostics': networkDiagnosticPanel.open(); break;
+      case 'network-diagnostics': debugToolsPanel.selectProvider(state.provider); showPage('debug'); break;
+      case 'debug-tools': showPage('debug'); break;
       case 'save-character':
         try {
           if (!profileUI.draft?.name.trim()) throw new Error('请填写档案名称');
@@ -3497,7 +3531,7 @@ export function mountPlugin(root, next) {
       case 'new-character':
         if (!discardProfileChanges()) break;
         profileUI.scope = 'global';
-        profileUI.draft = normalizeProfile({ id: crypto.randomUUID(), name: '新角色' });
+        profileUI.draft = normalizeProfile({ id: randomUUID(), name: '新角色' });
         profileUI.dirty = true; profileUI.error = ''; render(); host.querySelector('[data-profile-field="name"]')?.focus(); break;
       case 'profiles-open': showPage('characters'); break;
       case 'profile-reference-upload': host.querySelector('[data-profile-reference-file]')?.click(); break;
@@ -3517,7 +3551,7 @@ export function mountPlugin(root, next) {
       case 'profile-new-outfit': {
         const draft = profileUI.draft;
         if (!draft || draft.outfits.length >= 20) break;
-        const outfit = { id: crypto.randomUUID(), name: '新服装', prompt: '' };
+        const outfit = { id: randomUUID(), name: '新服装', prompt: '' };
         draft.outfits.push(outfit); if (!draft.defaultOutfitId) draft.defaultOutfitId = outfit.id;
         profileUI.dirty = true; render(); break;
       }

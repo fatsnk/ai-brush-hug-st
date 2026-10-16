@@ -1,3 +1,4 @@
+import { randomUUID } from '../crypto-compat.js';
 import { escapeHtml as esc } from '../config.js';
 import { icon } from '../icons.js';
 import { samples } from './sample-data.js';
@@ -229,7 +230,7 @@ export function saveComfyPreset(state, name) {
     if (!title || title.length > 40) throw new Error('预设名称需为 1 至 40 个字符');
     if (title === '基础文生图' || presets.some((item) => item.name.toLocaleLowerCase() === title.toLocaleLowerCase())) throw new Error('已有同名预设');
     if (presets.length >= 10) throw new Error('最多保存 10 个工作流预设');
-    id = crypto.randomUUID();
+    id = randomUUID();
     presets.push(savePresetBinding(state, 'comfyui', { id, name: title, config }));
   }
   if (bytes(presets) + bytes(config) > MAX_LIBRARY_BYTES) throw new Error('工作流预设空间已满，请删除不需要的预设或导出备份');

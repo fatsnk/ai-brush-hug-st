@@ -1,10 +1,11 @@
+import { randomUUID } from './crypto-compat.js';
 const text = (value, max) => typeof value === 'string' ? value.slice(0, max) : '';
 export const ARTIST_LIBRARY_LIMIT = 450 * 1024;
-export const emptyArtist = () => ({ id: crypto.randomUUID(), name: '', category: '', artist: '', quality: '', negative: '', preview: '', favorite: false, target: 'all' });
+export const emptyArtist = () => ({ id: randomUUID(), name: '', category: '', artist: '', quality: '', negative: '', preview: '', favorite: false, target: 'all' });
 
 export function normalizeArtist(value = {}) {
   return {
-    id: typeof value.id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value.id) ? value.id : crypto.randomUUID(),
+    id: typeof value.id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value.id) ? value.id : randomUUID(),
     name: text(value.name, 40).trim(), category: text(value.category, 40).trim(),
     artist: text(value.artist ?? value.tags, 4000), quality: text(value.quality, 4000),
     negative: text(value.negative, 12000), favorite: value.favorite === true,
@@ -43,7 +44,7 @@ export function importArtistLibrary(entries, raw) {
   let next = structuredClone(entries);
   for (const value of raw.entries) {
     const entry = normalizeArtist(value);
-    entry.id = crypto.randomUUID();
+    entry.id = randomUUID();
     const base = entry.name.slice(0, 32);
     let suffix = 1;
     while (next.some((item) => item.name.toLocaleLowerCase() === entry.name.toLocaleLowerCase())) entry.name = `${base} (${++suffix})`;

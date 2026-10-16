@@ -1,3 +1,4 @@
+import { randomUUID } from '../crypto-compat.js';
 import { escapeHtml as esc } from '../config.js';
 import { icon } from '../icons.js';
 import { samples } from './sample-data.js';
@@ -154,7 +155,7 @@ export function saveNovelAIPreset(state, name) {
     throw new Error('已有同名预设，请换一个名称');
   }
   if (state.novelaiPresets.length >= 50) throw new Error('最多保存 50 个预设，请先删除不需要的预设');
-  const preset = savePresetBinding(state, 'novelai', { id: crypto.randomUUID(), name: title, params });
+  const preset = savePresetBinding(state, 'novelai', { id: randomUUID(), name: title, params });
   state.novelaiPresets.push(preset);
   state.novelaiPresetId = preset.id;
   return preset;

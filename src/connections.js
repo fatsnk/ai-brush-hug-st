@@ -1,3 +1,4 @@
+import { randomUUID } from './crypto-compat.js';
 export const CONNECTION_PROVIDERS = ['novelai', 'openai', 'comfyui', 'sdwebui'];
 const text = (value, max) => typeof value === 'string' ? value.slice(0, max) : '';
 const timeout = (value, fallback, max) => Math.max(5, Math.min(max, Math.round(Number(value) || fallback)));
@@ -55,7 +56,7 @@ export function normalizeConnections(state) {
       const add = (name, connection) => {
         const same = entries.find((entry) => JSON.stringify(entry.connection) === JSON.stringify(connection));
         if (same) return same.id;
-        const entry = { id: crypto.randomUUID(), name: uniqueName(entries, name), connection };
+        const entry = { id: randomUUID(), name: uniqueName(entries, name), connection };
         entries.push(entry);
         return entry.id;
       };
@@ -149,7 +150,7 @@ export function saveConnectionProfile(state, provider, name, id = '') {
   const previous = entries.find((entry) => entry.id === id);
   if (id && !previous) throw new Error('接口配置不存在');
   if (!previous && entries.length >= 50) throw new Error('每种模式最多保存 50 个接口');
-  const entry = { id: previous?.id || crypto.randomUUID(), name: title, connection: normalizeConnection(provider, state.connections[provider]) };
+  const entry = { id: previous?.id || randomUUID(), name: title, connection: normalizeConnection(provider, state.connections[provider]) };
   if (previous) entries.splice(entries.indexOf(previous), 1, entry);
   else entries.push(entry);
   state.connectionProfileIds[provider] = entry.id;

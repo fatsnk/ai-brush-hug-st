@@ -1,7 +1,9 @@
+import { randomUUID } from './crypto-compat.js';
 import { createCredentialVault } from './credential-vault.js';
 import { apiError } from './extension-api.js';
 import { createReleaseMonitor } from './release-monitor.js';
 import { getBrowserStorage, readBrowserCache, writeBrowserCache } from './browser-cache.js';
+import { restoreStorageFailure } from './debug-errors.js';
 
 const environment = () => window.__LINGHUASHI_ENV__ || {};
 const secretRequests = new Map();
@@ -54,7 +56,7 @@ export function subscribeReleaseState(listener) {
 export function checkReleaseVersion() {
   if (!isInstalled()) return previewReleases().check({ force: true });
   return new Promise((resolve, reject) => {
-    const requestId = crypto.randomUUID();
+    const requestId = randomUUID();
     const timer = setTimeout(() => { releaseRequests.delete(requestId); reject(new Error('检查更新超时，请稍后重试')); }, 20000);
     releaseRequests.set(requestId, { resolve, reject, timer });
     window.parent.postMessage({ type: 'linghuashi:release-check', requestId }, location.origin);
@@ -66,7 +68,7 @@ export function openExtensionManager() {
 export function updateExtensionVersion(version) {
   if (!isInstalled()) return Promise.reject(new Error('请在酒馆内执行更新，设计预览可从发布页下载'));
   return new Promise((resolve, reject) => {
-    const requestId = crypto.randomUUID();
+    const requestId = randomUUID();
     const timer = setTimeout(() => {
       updateRequests.delete(requestId); reject(new Error('更新响应超时，请先到扩展管理核对结果'));
     }, 285000);
@@ -85,7 +87,7 @@ window.addEventListener('message', (event) => {
 export function extensionChatRequest(value) {
   if (!isInstalled()) return Promise.reject(apiError('CHAT_TARGET_INVALID', '聊天目标需在酒馆内使用'));
   return new Promise((resolve, reject) => {
-    const requestId = crypto.randomUUID();
+    const requestId = randomUUID();
     const timer = setTimeout(() => {
       extensionChatRequests.delete(requestId);
       reject(apiError('CHAT_TARGET_INVALID', '聊天关联超时，请核对消息与任务记录'));
@@ -113,7 +115,7 @@ export function assistantHostRequest(action, value = {}, { signal, timeout = 120
   }
   signal?.throwIfAborted();
   return new Promise((resolve, reject) => {
-    const requestId = crypto.randomUUID();
+    const requestId = randomUUID();
     const cancel = () => {
       window.parent.postMessage({ type: 'linghuashi:assistant-request', requestId, action: 'cancel' }, location.origin);
       finish(new Error('提示词助手操作已取消'));
@@ -151,17 +153,17 @@ window.addEventListener('message', (event) => {
   if (!pending) return;
   storageRequests.delete(event.data.requestId);
   clearTimeout(pending.timer);
-  if (event.data.error) pending.reject(new Error(event.data.error));
+  if (event.data.error) pending.reject(restoreStorageFailure(event.data.error, event.data.failure));
   else pending.resolve(event.data.value);
 });
 
 export function storageRequest(action, body = {}) {
   if (!isInstalled()) return Promise.reject(new Error('酒馆服务器存图需在酒馆内使用'));
   return new Promise((resolve, reject) => {
-    const requestId = crypto.randomUUID();
+    const requestId = randomUUID();
     const timer = setTimeout(() => {
       storageRequests.delete(requestId);
-      reject(new Error('酒馆服务器存图请求超时，请重试'));
+      reject(restoreStorageFailure('酒馆服务器存图请求超时，请重试', { name: 'TimeoutError', scope: 'tavern-storage' }));
     }, 125000);
     storageRequests.set(requestId, { resolve, reject, timer });
     window.parent.postMessage({ type: 'linghuashi:storage-request', requestId, action, body }, location.origin);
@@ -176,7 +178,7 @@ export function credentialRequest(action, provider, value = {}) {
     return action === 'read' ? previewVault.read(provider, value.ref) : previewVault.write(provider, value.key, value.ref);
   }
   return new Promise((resolve, reject) => {
-    const requestId = crypto.randomUUID();
+    const requestId = randomUUID();
     const timer = setTimeout(() => {
       secretRequests.delete(requestId);
       reject(new Error('酒馆秘钥存储超时，请重试'));

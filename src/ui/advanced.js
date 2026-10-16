@@ -1,3 +1,4 @@
+import { randomUUID } from '../crypto-compat.js';
 import { escapeHtml as esc, downloadJson } from '../config.js';
 import { icon, paintIcons } from '../icons.js';
 import { ADVANCED_MODES, normalizeAdvanced, advancedOf, modelCapabilities, vibeModelKey, parseVibeFile, exportVibeFile } from '../advanced-generation.js';
@@ -261,7 +262,7 @@ export class AdvancedPanel {
       if (!file || file.size > 24 * 1024 * 1024) throw new Error('请选择 24 MB 内的 .naiv4vibe 文件');
       const parsed = parseVibeFile(await file.text()), advanced = advancedOf(this.getSnapshot());
       if (advanced.vibes.length >= 8) throw new Error('最多使用 8 份画风参考');
-      const entry = { id: crypto.randomUUID(), name: parsed.name, enabled: true, strength: parsed.strength,
+      const entry = { id: randomUUID(), name: parsed.name, enabled: true, strength: parsed.strength,
         information: parsed.encodings[0].information, image: null, encodings: {} };
       if (parsed.image) {
         const normalized = await normalizeReferenceImage(new Blob([assetBytes(parsed.image)], { type: 'image/png' }));
@@ -287,7 +288,7 @@ export class AdvancedPanel {
       advanced.source = asset; advanced.mask = null; this.resetMask(); this.useSourceSize(snapshot, advanced);
     } else if (kind === 'character') advanced.character = asset;
     else if (kind === 'reference') advanced.references.push(asset);
-    else advanced.vibes.push({ id: crypto.randomUUID(), name: asset.name, image: asset, enabled: true, information: 1, strength: 0.6, encodings: {} });
+    else advanced.vibes.push({ id: randomUUID(), name: asset.name, image: asset, enabled: true, information: 1, strength: 0.6, encodings: {} });
     if (snapshot.provider === 'comfyui') snapshot.config.advanced = normalizeAdvanced(advanced);
     else snapshot.params.advanced = normalizeAdvanced(advanced);
     this.update(snapshot);

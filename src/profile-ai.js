@@ -1,3 +1,4 @@
+import { randomUUID } from './crypto-compat.js';
 import { normalizeProfile, normalizeProfileLibrary, saveProfile } from './character-profiles.js';
 
 export const PROFILE_AI_FIELDS = Object.freeze({
@@ -47,7 +48,7 @@ export function buildProfileMessages(sources) {
   ].join('\n') }, { role: 'user', content: JSON.stringify({ CHARACTERS: material }) }];
 }
 
-export function parseProfileResult(raw, sources, uuid = () => crypto.randomUUID()) {
+export function parseProfileResult(raw, sources, uuid = () => randomUUID()) {
   buildProfileMessages(sources);
   if (typeof raw !== 'string' || !raw.trim() || raw.length > 100000) throw new Error('文字模型没有返回有效角色草稿');
   let result;

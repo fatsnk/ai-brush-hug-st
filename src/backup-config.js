@@ -1,3 +1,4 @@
+import { randomUUID } from './crypto-compat.js';
 import { normalizeSettings, SETTINGS_DEFAULTS } from './ui/settings.js';
 import { normalizeNovelAIState } from './ui/novelai.js';
 import { normalizeOpenAIState } from './ui/openai.js';
@@ -128,7 +129,7 @@ export async function portableCredentials(config, readKey, includeKeys) {
     if (!original) continue;
     const identity = `${provider}:${original}`;
     if (!slots.has(identity)) {
-      const slot = `browser:${crypto.randomUUID()}`;
+      const slot = `browser:${randomUUID()}`;
       slots.set(identity, slot);
       if (includeKeys) {
         const key = await readKey(provider, original);
@@ -179,7 +180,7 @@ function combineRows(existing, incoming, limit, idMap = new Map(), nameLimit = 4
     const same = next.find((entry) => equivalent(entry) === equivalent(item));
     if (same) { idMap.set(item.id, same.id); continue; }
     const row = cloneBackup(item);
-    if (next.some((entry) => entry.id === row.id)) row.id = crypto.randomUUID();
+    if (next.some((entry) => entry.id === row.id)) row.id = randomUUID();
     idMap.set(item.id, row.id);
     let suffix = 1;
     const base = row.name || '导入条目';

@@ -1,3 +1,4 @@
+import { randomUUID } from '../crypto-compat.js';
 import { escapeHtml as esc } from '../config.js';
 import { icon } from '../icons.js';
 import { SDWEBUI_DEFAULTS, SDWEBUI_LIMITS, normalizeSDWebUI } from '../sdwebui.js';
@@ -38,7 +39,7 @@ export function saveSDWebUIPreset(state, name) {
   if (!title || title.length > 40) throw new Error('预设名称需为 1 至 40 个字符');
   if (title === '默认配置' || state.sdwebuiPresets.some((item) => item.name.toLocaleLowerCase() === title.toLocaleLowerCase())) throw new Error('已有同名预设');
   if (state.sdwebuiPresets.length >= 50) throw new Error('最多保存 50 个 SDWebUI 预设');
-  const preset = savePresetBinding(state, 'sdwebui', { id: crypto.randomUUID(), name: title, params: normalizeSDWebUI(state.sdwebui) });
+  const preset = savePresetBinding(state, 'sdwebui', { id: randomUUID(), name: title, params: normalizeSDWebUI(state.sdwebui) });
   state.sdwebuiPresets.push(preset); state.sdwebuiPresetId = preset.id;
   return preset;
 }

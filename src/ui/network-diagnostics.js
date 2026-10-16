@@ -10,10 +10,10 @@ const outcomeTitle = (row) => row.outcome === 'http' ? `HTTP ${row.httpStatus}` 
 })[row.outcome] || '待检测';
 
 export class NetworkDiagnosticPanel {
-  constructor({ context }) { this.context = context; }
-  open() {
+  constructor({ context, onClose = () => {} }) { this.context = context; this.onClose = onClose; }
+  open(source) {
     if (this.dialog?.isConnected) { this.dialog.focus(); return; }
-    this.source = { ...this.context() };
+    this.source = { ...(source || this.context()) };
     this.report = null; this.busy = false; this.message = '';
     const dialog = document.createElement('dialog');
     dialog.className = 'network-diagnostic-dialog';
@@ -41,6 +41,7 @@ export class NetworkDiagnosticPanel {
       this.controller?.abort();
       dialog.remove();
       if (this.dialog === dialog) this.dialog = null;
+      this.onClose();
     }, { once: true });
     dialog.showModal(); paintIcons(dialog); void this.run();
   }

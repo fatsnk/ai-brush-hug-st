@@ -1,3 +1,4 @@
+import { randomUUID } from './crypto-compat.js';
 export const promptIdentity = (value) => String(value || '').trim().replace(/\\([()[\]{}])/g, '$1')
   .replace(/_/g, ' ').replace(/\s+/g, ' ').toLowerCase();
 
@@ -91,7 +92,7 @@ function parseItems(value, tags, depth = 0) {
   const lookup = new Map(tags.map((tag) => [promptIdentity(tag.en), tag]));
   return splitPrompt(value).parts.map((raw) => {
     const parsed = unwrap(raw, depth, tags), tag = lookup.get(promptIdentity(parsed.en));
-    return { id: crypto.randomUUID(), raw, kind: parsed.syntax === 'opaque' ? 'opaque' : 'tag', ...parsed,
+    return { id: randomUUID(), raw, kind: parsed.syntax === 'opaque' ? 'opaque' : 'tag', ...parsed,
       tagId: parsed.kind === 'group' ? '' : tag?.id || '', name: parsed.kind === 'group' ? '标签组' : tag?.name || parsed.en };
   });
 }
@@ -210,7 +211,7 @@ export function groupPromptItems(items, ids, format, { numeric = true } = {}) {
   const depth = (item) => item.kind === 'group' ? 1 + Math.max(...item.children.map(depth)) : 0;
   if (selected.some((item) => depth(item) >= 8)) throw new Error('标签组最多嵌套 8 层');
   const body = serializePrompt(selected), first = items.findIndex((item) => ids.includes(item.id));
-  const group = { id: crypto.randomUUID(), kind: 'group', syntax: format, tagId: '', name: '标签组',
+  const group = { id: randomUUID(), kind: 'group', syntax: format, tagId: '', name: '标签组',
     children: structuredClone(selected), en: body, weight: format === 'novelai' && !numeric ? 1.05 : 1,
     ...(format === 'novelai' ? numeric ? { numeric: true } : { level: 1, numericAllowed: false } : {}),
     raw: format === 'novelai' ? numeric ? `1::${body}::` : `{${body}}` : `(${body}:1)` };

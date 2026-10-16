@@ -1,3 +1,4 @@
+import { randomUUID } from '../crypto-compat.js';
 import { escapeHtml as esc, downloadJson } from '../config.js';
 import { icon, paintIcons } from '../icons.js';
 import { BUILTIN_TAGS } from '../data/prompt-tags.js';
@@ -521,7 +522,7 @@ export class TagLibraryPanel {
           this.commitItems(target, items);
         } else {
           switch (button.dataset.tagAction) {
-            case 'new': this.ui.draft = { id: `custom-${crypto.randomUUID()}`, name: '', en: '', category: '自定义', aliases: [] }; break;
+            case 'new': this.ui.draft = { id: `custom-${randomUUID()}`, name: '', en: '', category: '自定义', aliases: [] }; break;
             case 'cancel': this.ui.draft = null; break;
             case 'delete': {
               if (!window.confirm(`删除“${this.ui.draft.name}”？`)) return;
@@ -576,13 +577,13 @@ export class TagLibraryPanel {
               const draft = this.composition(target), ids = this.selections.get(target) || [];
               if (draft.text !== draft.parsedText) throw new Error('请先切换可视化解析原文');
               const chosen = copyPromptSelection(draft.items, ids);
-              this.ui.templateDraft = { id: `template-${crypto.randomUUID()}`, name: '', category: '我的素材',
+              this.ui.templateDraft = { id: `template-${randomUUID()}`, name: '', category: '我的素材',
                 positive: '', negative: '', artist: '', [target]: serializePrompt(chosen),
                 layout: { [target]: cardLayout(chosen) } }; break;
             }
             case 'cancel-group': this.ui.groupDraft = null; break;
             case 'new-template':
-              this.ui.templateDraft = { id: `template-${crypto.randomUUID()}`, name: '', category: '我的素材', positive: '', negative: '', artist: '' }; break;
+              this.ui.templateDraft = { id: `template-${randomUUID()}`, name: '', category: '我的素材', positive: '', negative: '', artist: '' }; break;
             case 'group': {
               const draft = this.composition(target);
               const items = (this.isVisual() ? groupPromptSelection : groupPromptItems)(draft.items, [...(this.selections.get(target) || [])], draft.format, { numeric: numericPromptGroups(this.context()) });
@@ -601,7 +602,7 @@ export class TagLibraryPanel {
             case 'apply-composition': this.applyCompositions([target]); break;
             case 'apply-pair': this.applyCompositions(['positive', 'negative']); break;
             case 'save-template': {
-              this.ui.templateDraft = { id: `template-${crypto.randomUUID()}`, name: '', category: '我的组合',
+              this.ui.templateDraft = { id: `template-${randomUUID()}`, name: '', category: '我的组合',
                 positive: '', negative: '', artist: '',
                 layout: Object.fromEntries(this.composerTargets().map((field) => [field, cardLayout(this.composition(field).items)])),
                 ...Object.fromEntries(this.composerTargets().filter((field) => tagTargets(this.context()).some((row) => row.id === field && row.enabled))

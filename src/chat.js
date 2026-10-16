@@ -1,3 +1,5 @@
+import { sha256Hex } from './crypto-compat.js';
+
 export const CHAT_SLOT_LIMIT = 16;
 export const CHAT_PENDING = new Set(['preparing', 'confirming', 'queued', 'running']);
 export const CHAT_DEFAULTS = Object.freeze({ auto: true, confirm: false, inline: true });
@@ -38,8 +40,7 @@ export function eligibleMessage(message) {
 }
 
 export async function digest(value) {
-  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
-  return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return sha256Hex(new TextEncoder().encode(value));
 }
 
 export async function bindImageSlots(context, message, prefix, suffix) {

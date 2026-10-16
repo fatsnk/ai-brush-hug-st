@@ -7,6 +7,7 @@ import { createChatLink } from './chat-link.js';
 import { createCredentialVault } from './credential-vault.js';
 import { SETTINGS_DEFAULTS } from './ui/settings.js';
 import { createStorageRequest, STORAGE_ACTIONS } from './server-storage.js';
+import { storageFailureInfo } from './debug-errors.js';
 import { createAssistantHost } from './assistant-host.js';
 import { chatIdentity } from './chat.js';
 import { RELEASE } from './release.js';
@@ -266,7 +267,7 @@ async function start() {
 
   function open(page) {
     if (destroyed) return;
-    if (['settings', 'updates', 'generate', 'batch', 'gallery', 'assistant', 'characters', 'styles', 'tags', 'connection', 'changelog'].includes(page)) requestedPage = page;
+    if (['settings', 'updates', 'generate', 'batch', 'gallery', 'assistant', 'characters', 'styles', 'tags', 'connection', 'components', 'debug', 'changelog'].includes(page)) requestedPage = page;
     floatingMenu.close();
     previousFocus = shadow.activeElement || document.activeElement;
     backdrop.hidden = false;
@@ -390,7 +391,7 @@ async function start() {
       && data.requestId.length <= 64 && STORAGE_ACTIONS.has(data.action)) {
       void storageRequest(data.action, data.body).then(
         (value) => post('linghuashi:storage-result', { requestId: data.requestId, value }),
-        (error) => post('linghuashi:storage-result', { requestId: data.requestId, error: error.message }),
+        (error) => post('linghuashi:storage-result', { requestId: data.requestId, error: error.message, failure: storageFailureInfo(error) }),
       );
     }
     else if (data.type === 'linghuashi:error') {

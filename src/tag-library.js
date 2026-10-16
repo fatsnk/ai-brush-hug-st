@@ -1,3 +1,4 @@
+import { randomUUID } from './crypto-compat.js';
 import { BUILTIN_TAGS } from './data/prompt-tags.js';
 import { BUILTIN_TAG_TEMPLATES } from './data/prompt-tag-templates.js';
 import { appendPromptParts } from './prompt-composer.js';
@@ -15,7 +16,7 @@ const bytes = (value) => new TextEncoder().encode(JSON.stringify(value)).length;
 export function normalizeTag(value = {}) {
   const source = value && typeof value === 'object' ? value : {};
   return {
-    id: /^custom-[a-zA-Z0-9_-]{1,64}$/.test(source.id) ? source.id : `custom-${crypto.randomUUID()}`,
+    id: /^custom-[a-zA-Z0-9_-]{1,64}$/.test(source.id) ? source.id : `custom-${randomUUID()}`,
     name: text(source.name, 80), en: text(source.en, 200),
     category: text(source.category, 40) || '自定义',
     aliases: [...new Set((Array.isArray(source.aliases) ? source.aliases : [])
@@ -55,7 +56,7 @@ export const allTagTemplates = (library) => [...BUILTIN_TAG_TEMPLATES, ...(libra
 
 export function normalizeTagTemplate(value = {}) {
   const layout = normalizeCardLayout(value.layout);
-  return { id: /^template-[a-zA-Z0-9_-]{1,64}$/.test(value.id) ? value.id : `template-${crypto.randomUUID()}`,
+  return { id: /^template-[a-zA-Z0-9_-]{1,64}$/.test(value.id) ? value.id : `template-${randomUUID()}`,
     name: text(value.name, 80), category: text(value.category, 40) || '我的组合',
     positive: text(value.positive, 12000), negative: text(value.negative, 12000), artist: text(value.artist, 4000),
     ...(value.favorite === true ? { favorite: true } : {}),
@@ -134,7 +135,7 @@ export function mergeTagLibraries(current, incoming) {
     const same = allTags(next).find((tag) => identity(tag.en) === identity(raw.en));
     if (same && !same.id.startsWith('builtin-')) { mapping.set(raw.id, same.id); continue; }
     const tag = { ...raw };
-    if (allTags(next).some((row) => row.id === tag.id)) tag.id = `custom-${crypto.randomUUID()}`;
+    if (allTags(next).some((row) => row.id === tag.id)) tag.id = `custom-${randomUUID()}`;
     mapping.set(raw.id, tag.id);
     if (same) {
       next.custom.push(tag);
@@ -149,7 +150,7 @@ export function mergeTagLibraries(current, incoming) {
     const same = (next.templates || []).find((row) => ['category', 'positive', 'negative', 'artist'].every((key) => row[key] === raw[key]));
     if (same) { renamed.set(`<${raw.category}:${raw.name}>`, `<${same.category}:${same.name}>`); continue; }
     const entry = { ...raw };
-    if ((next.templates || []).some((row) => row.id === entry.id)) entry.id = `template-${crypto.randomUUID()}`;
+    if ((next.templates || []).some((row) => row.id === entry.id)) entry.id = `template-${randomUUID()}`;
     const base = entry.name;
     let suffix = 1;
     while ((next.templates || []).some((row) => row.name.toLowerCase() === entry.name.toLowerCase())) {

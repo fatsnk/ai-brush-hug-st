@@ -1,3 +1,4 @@
+import { randomUUID } from './crypto-compat.js';
 import { createTaskLedger, frozenPlan, CHUNK_SIZE } from '../server/linghuashi-storage/task-ledger.mjs';
 import { sdwebuiHeaders } from './sdwebui.js';
 
@@ -58,14 +59,14 @@ export function createBrowserTaskRequest(name) {
 export class TaskPersistence {
   constructor({ request, settings, readKey, changed = () => {} }) {
     this.request = request; this.settings = settings; this.readKey = readKey; this.changed = changed;
-    this.owner = crypto.randomUUID();
+    this.owner = randomUUID();
   }
   list() { return this.request('task/list'); }
-  async create(plan, id = crypto.randomUUID()) {
+  async create(plan, id = randomUUID()) {
     return this.request('task/create', { id, plan: frozenPlan(plan) });
   }
   async claim(job) {
-    const token = crypto.randomUUID();
+    const token = randomUUID();
     const retained = job.execution;
     const result = await this.request('task/claim', { id: job.id, owner: this.owner, token,
       captureOnly: Boolean(retained?.bytes), settings: this.settings() });

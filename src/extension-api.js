@@ -1,3 +1,4 @@
+import { randomUUID, sha256Hex } from './crypto-compat.js';
 export const EXTENSION_API_VERSION = 1;
 const object = (value) => value && typeof value === 'object' && !Array.isArray(value);
 const identifier = (value) => typeof value === 'string' && /^[A-Za-z0-9_-]{1,80}$/.test(value);
@@ -66,8 +67,7 @@ export function normalizeExtensionOptions(value) {
   return result;
 }
 export async function extensionDigest(value) {
-  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(value)));
-  return [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  return sha256Hex(new TextEncoder().encode(JSON.stringify(value)));
 }
 export async function extensionTaskId(source, requestId) {
   const hash = await extensionDigest(['linghuashi-extension-v1', source.id, requestId]);
@@ -127,7 +127,7 @@ export function createExtensionAPI({ version, ensureReady, send, timeout = 15000
     if (destroyed) throw apiError('UNAVAILABLE', '灵画师已卸载');
     if (pending.size >= 64) throw apiError('BUSY', '扩展接口请求过多，请稍后重试');
     return new Promise((resolve, reject) => {
-      const requestId = crypto.randomUUID();
+      const requestId = randomUUID();
       const abort = () => {
         send('linghuashi:extension-abort', { requestId });
         finish(apiError('CANCELLED', '扩展调用已取消'));

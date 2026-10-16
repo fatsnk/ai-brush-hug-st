@@ -1,3 +1,4 @@
+import { randomUUID } from './crypto-compat.js';
 import { bindImageSlots, bindSmartSlot, bindingIsCurrent, chatIdentity, CHAT_PENDING } from './chat.js';
 import { normalizeAssistant } from './prompt-assistant.js';
 import { createChatSync, openChatStore } from './chat-storage.js';
@@ -418,7 +419,7 @@ export function createChatLink({ account, getContext, settings, send, open, noti
       }
       const latest = (await store.versions(row.id, row.storageLocation)).find((item) => item.id === row.id);
       if (!latest || !chatImageBelongsTo(latest, entry.binding) || !isCurrent(entry)) return;
-      const requestId = crypto.randomUUID();
+      const requestId = randomUUID();
       const current = { ...entry, requestId, quickImage: true, groupId, storageLocation: row.storageLocation,
         record: { status: 'preparing', requestId }, invalidated: false };
       requests.set(requestId, current); scheduledRender();
@@ -450,7 +451,7 @@ export function createChatLink({ account, getContext, settings, send, open, noti
         notice('任务记录待核对，请先检查服务端任务'); return;
       }
       if (previous && !draftPlan && !window.confirm('这张配图有任务记录。请先核对服务端是否已经生成；继续会重新提交生图请求，可能再次计费。')) return;
-      const requestId = crypto.randomUUID();
+      const requestId = randomUUID();
       const record = await store.reserve(entry.binding, requestId, Boolean(previous));
       if (!record) return;
       if (!isCurrent(entry)) {

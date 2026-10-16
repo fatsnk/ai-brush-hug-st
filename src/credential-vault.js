@@ -1,3 +1,4 @@
+import { randomUUID } from './crypto-compat.js';
 import { CONNECTION_PROVIDERS, validKeyRef } from './connections.js';
 
 export function createCredentialVault({ account, storage, request }) {
@@ -67,7 +68,7 @@ export function createCredentialVault({ account, storage, request }) {
         ? await navigator.locks.request(`linghuashi-secret-write:${encodeURIComponent(account)}`, save)
         : await save();
     } else {
-      id = crypto.randomUUID();
+      id = randomUUID();
       const saved = browserSecrets();
       saved[id] = { [provider]: key };
       try { storage.setItem(storageName, JSON.stringify(saved)); }

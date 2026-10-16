@@ -1,3 +1,4 @@
+import { randomUUID } from '../crypto-compat.js';
 import { escapeHtml as esc } from '../config.js';
 import { icon } from '../icons.js';
 import { samples } from './sample-data.js';
@@ -117,7 +118,7 @@ export function saveOpenAIPreset(state, name) {
   if (!title || title.length > 40) throw new Error('预设名称需为 1 至 40 个字符');
   if (title === '默认配置' || state.openaiPresets.some((preset) => preset.name.toLocaleLowerCase() === title.toLocaleLowerCase())) throw new Error('已有同名预设');
   if (state.openaiPresets.length >= 50) throw new Error('最多保存 50 个预设');
-  const preset = savePresetBinding(state, 'openai', { id: crypto.randomUUID(), name: title, params });
+  const preset = savePresetBinding(state, 'openai', { id: randomUUID(), name: title, params });
   state.openaiPresets.push(preset); state.openaiPresetId = preset.id;
   return preset;
 }

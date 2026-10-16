@@ -1,3 +1,5 @@
+import { randomUUID } from '../crypto-compat.js';
+import { changedVersionRows } from '../drawing-write-set.js';
 import JSZip from 'jszip';
 import { escapeHtml as esc } from '../config.js';
 import { icon } from '../icons.js';
@@ -240,7 +242,7 @@ export async function makeDrawing(blob, values = {}) {
     if (Number.isSafeInteger(seed) && seed >= 0) metadata.snapshot.params.seed = seed;
   }
   const createdAt = Number(values.createdAt);
-  const id = typeof values.id === 'string' && /^[A-Za-z0-9_-]{1,80}$/.test(values.id) ? values.id : crypto.randomUUID();
+  const id = typeof values.id === 'string' && /^[A-Za-z0-9_-]{1,80}$/.test(values.id) ? values.id : randomUUID();
   return {
     id,
     title: (typeof values.title === 'string' ? values.title.trim() : '未命名图片').slice(0, 100) || '未命名图片',
@@ -303,19 +305,19 @@ export class DrawingLibrary {
     const done = transactionDone(transaction);
     const store = transaction.objectStore('drawings');
     const read = store.getAll();
-    let exceeded = false;
+    let exceeded = false, failure;
     read.onsuccess = () => {
       let next = read.result;
       const added = rows.filter((row) => !next.some((item) => item.id === row.id));
       if (next.length + added.length > MAX_RECORDS) { exceeded = true; transaction.abort(); return; }
       try {
         for (const row of added) next = insertVersion(next, row);
-        next.forEach((row) => store.put(row));
-      } catch { transaction.abort(); }
+        changedVersionRows(read.result, next).forEach((row) => store.put(row));
+      } catch (error) { failure = error; transaction.abort(); }
     };
     await done.catch((error) => {
       if (exceeded) throw new Error('最多保存 500 张图片，请先导出并清理一些图片');
-      throw error;
+      throw failure || error;
     });
   }
 
@@ -325,11 +327,14 @@ export class DrawingLibrary {
     const done = transactionDone(transaction);
     const store = transaction.objectStore('drawings');
     const request = store.getAll();
+    let failure;
     request.onsuccess = () => {
-      ids.forEach((id) => store.delete(id));
-      removeVersions(request.result, ids).forEach((row) => store.put(row));
+      try {
+        ids.forEach((id) => store.delete(id));
+        changedVersionRows(request.result, removeVersions(request.result, ids)).forEach((row) => store.put(row));
+      } catch (error) { failure = error; transaction.abort(); }
     };
-    await done;
+    await done.catch((error) => { throw failure || error; });
   }
 
   async setFavorite(id, favorite) {
@@ -348,7 +353,7 @@ export class DrawingLibrary {
     const store = transaction.objectStore('drawings'), read = store.getAll();
     let failure;
     read.onsuccess = () => {
-      try { selectVersion(read.result, id).forEach((row) => store.put(row)); }
+      try { changedVersionRows(read.result, selectVersion(read.result, id)).forEach((row) => store.put(row)); }
       catch (error) { failure = error; transaction.abort(); }
     };
     await done.catch((error) => { throw failure || error; });
@@ -360,13 +365,16 @@ export class DrawingLibrary {
     const done = transactionDone(transaction);
     const store = transaction.objectStore('drawings');
     const request = store.getAll();
-    let plan = { ids: [], due: false };
+    let plan = { ids: [], due: false }, failure;
     request.onsuccess = () => {
-      plan = cleanupPlan(request.result, settings, lastCleanup);
-      for (const id of plan.ids) store.delete(id);
-      removeVersions(request.result, plan.ids).forEach((row) => store.put(row));
+      try {
+        plan = cleanupPlan(request.result, settings, lastCleanup);
+        if (!plan.ids.length) return;
+        for (const id of plan.ids) store.delete(id);
+        changedVersionRows(request.result, removeVersions(request.result, plan.ids)).forEach((row) => store.put(row));
+      } catch (error) { failure = error; transaction.abort(); }
     };
-    await done;
+    await done.catch((error) => { throw failure || error; });
     return plan;
   }
 

@@ -1,6 +1,7 @@
 import { currentDrawing, insertVersion, normalizeVersion, protectedVersionGroups, validImageId, versionGroupId, versionOrder } from '../server/linghuashi-storage/image-versions.mjs';
 import { normalizeBackupChats, STORAGE_PROTOCOL } from '../server/linghuashi-storage/backup-records.mjs';
 import { validBinding } from './chat.js';
+import { sha256Hex } from './crypto-compat.js';
 
 const FOLDER = 'linghuashi';
 const THUMBS = 'linghuashi-thumbnails';
@@ -15,8 +16,7 @@ function base64(bytes) {
   for (let offset = 0; offset < bytes.length; offset += 16384) value += String.fromCharCode(...bytes.subarray(offset, offset + 16384));
   return btoa(value);
 }
-const hash = async (bytes) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))]
-  .map((value) => value.toString(16).padStart(2, '0')).join('');
+const hash = sha256Hex;
 const metaName = (id) => `linghuashi-image-${id}.json`;
 const chatName = (id) => `linghuashi-chat-${id}.json`;
 const imagePath = (id, extension, thumb = false) => `user/images/${thumb ? THUMBS : FOLDER}/lh-${id}.${extension}`;
@@ -83,7 +83,7 @@ export function createNativeStorage({ api, read, account, now = Date.now, locks 
   async function readJSON(name, limit = 2500000) {
     const response = await read(filePath(name));
     if (response.status === 404) return null;
-    if (!response.ok) throw new Error('账号存储文件读取失败，请重试');
+    if (!response.ok) throw Object.assign(new Error('账号存储文件读取失败，请重试'), { status: response.status, scope: 'tavern-storage' });
     const raw = await response.text();
     if (raw.length > limit) throw new Error('账号存储文件超过大小限制');
     try { return JSON.parse(raw); } catch { throw new Error('账号存储文件损坏，请从备份恢复'); }
@@ -176,7 +176,7 @@ export function createNativeStorage({ api, read, account, now = Date.now, locks 
     if (action === 'reference/get') {
       if (!row) throw Object.assign(new Error('参考素材不存在，请重新上传'), { status: 404 });
       const response = await read(filePath(`${name}.bin`));
-      if (!response.ok) throw new Error('参考素材读取失败');
+      if (!response.ok) throw Object.assign(new Error('参考素材读取失败'), { status: response.status, scope: 'tavern-storage' });
       const bytes = new Uint8Array(await response.arrayBuffer()), offset = body.offset || 0;
       if (bytes.length > 4 * 1024 * 1024 || bytes.length !== row.size || !Number.isSafeInteger(offset) || offset < 0 || offset >= bytes.length
         || await hash(bytes) !== body.id) throw new Error('参考素材校验失败');
@@ -211,6 +211,14 @@ export function createNativeStorage({ api, read, account, now = Date.now, locks 
     return { row: saved, complete: true, offset: total };
   }
   async function dispatch(action, body = {}) {
+    if (action === 'diagnostics/status') {
+      const [originals, thumbs] = await Promise.all([FOLDER, THUMBS].map((folder) => api('/api/images/list', { folder, sortField: 'name' })));
+      if (!Array.isArray(originals) || !Array.isArray(thumbs)) throw new Error('酒馆图片列表格式无效');
+      const ids = (names) => new Set(names.map((name) => /^lh-([A-Za-z0-9_-]{1,80})\.(?:png|jpg|webp)$/i.exec(name)?.[1]).filter(Boolean));
+      const images = ids(originals), thumbnails = ids(thumbs);
+      return { readable: true, originals: images.size, thumbnails: thumbnails.size, maxRecords: LIMIT, diskFree: null,
+        unmatched: [...images].filter((id) => !thumbnails.has(id)).length + [...thumbnails].filter((id) => !images.has(id)).length };
+    }
     if (action === 'backup/status') return { version: 'native', protocol: STORAGE_PROTOCOL, account, native: true };
     if (action === 'list') {
       const rows = await list(body.refresh === true);

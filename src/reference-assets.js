@@ -1,4 +1,5 @@
 import { currentAccount, storageKey, storageRequest, isInstalled } from './runtime.js';
+import { sha256Hex } from './crypto-compat.js';
 
 const CHUNK = 512 * 1024;
 const MAX_ASSET = 4 * 1024 * 1024;
@@ -51,7 +52,7 @@ export class ReferenceAssets {
     if (!(blob instanceof Blob) || !blob.size || blob.size > MAX_ASSET) throw new Error('参考素材需小于 4 MB');
     if (location === 'server' && !isInstalled()) throw new Error('酒馆服务器素材需在酒馆内上传');
     const bytes = new Uint8Array(await blob.arrayBuffer());
-    const id = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+    const id = await sha256Hex(bytes);
     const asset = normalizeAsset({ ...metadata, id, location, mime: blob.type || 'application/octet-stream' });
     if (location === 'server') {
       for (let offset = 0; offset < bytes.length; offset += CHUNK) {
@@ -104,7 +105,7 @@ export class ReferenceAssets {
       chunks.push(bytes); offset += bytes.length;
     } while (offset < total);
     const blob = new Blob(chunks, { type: asset.mime });
-    const checksum = [...new Uint8Array(await crypto.subtle.digest('SHA-256', await blob.arrayBuffer()))].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+    const checksum = await sha256Hex(await blob.arrayBuffer());
     if (checksum !== asset.id) throw new Error('参考素材校验失败，请重新上传');
     return blob;
   }

@@ -65,6 +65,20 @@ test('native account images, metadata, references and favorites survive a fresh 
   assert.ok([...f.files.keys()].every((name) => name.startsWith('a/user/')));
 });
 
+test('diagnostics only lists current account image folders and returns counts without paths or names', async () => {
+  const f = memory(), a = f.native('a');
+  await a('add', addition('private-image'));
+  f.files.set('a/user/images/linghuashi/lh-orphan.png', new Uint8Array(1));
+  f.files.set('b/user/images/linghuashi/lh-other-account.png', new Uint8Array(1));
+  f.calls.length = 0;
+  assert.deepEqual(await a('diagnostics/status'), {
+    readable: true, originals: 2, thumbnails: 1, maxRecords: 10000, diskFree: null, unmatched: 1,
+  });
+  assert.equal(f.calls.length, 2);
+  assert.ok(f.calls.every((row) => row.account === 'a' && row.path === '/api/images/list'));
+  assert.doesNotMatch(JSON.stringify(await a('diagnostics/status')), /private|orphan|other-account|user\//);
+});
+
 test('independent devices adding images cannot overwrite each other through a shared index', async () => {
   const f = memory();
   const a = f.native('same'), b = f.native('same');
