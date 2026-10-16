@@ -70,7 +70,8 @@ export function createCredentialVault({ account, storage, request }) {
       id = crypto.randomUUID();
       const saved = browserSecrets();
       saved[id] = { [provider]: key };
-      storage.setItem(storageName, JSON.stringify(saved));
+      try { storage.setItem(storageName, JSON.stringify(saved)); }
+      catch { throw new Error('浏览器秘钥存储空间不足或不可用，请备份并整理站点存储后重试'); }
     }
     const result = `${store}:${id}`;
     if (!validKeyRef(result)) throw new Error('秘钥保存失败，请重试');

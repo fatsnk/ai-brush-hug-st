@@ -276,3 +276,15 @@ test('disabled exposure falls back to browser, while a failed server write stays
   await assert.rejects(failing.write('novelai', 'fixture-key'));
   assert.equal(serverStorage.data.size, 0);
 });
+
+test('browser credential quota failures preserve existing references and never claim a new key was saved', async () => {
+  const saved = storage();
+  const first = await createCredentialVault({ account: 'a', storage: saved }).write('novelai', 'existing-fixture-key');
+  const previous = [...saved.data.entries()];
+  saved.setItem = () => { throw new DOMException('Fixture quota exceeded', 'QuotaExceededError'); };
+  const vault = createCredentialVault({ account: 'a', storage: saved });
+  assert.equal(await vault.read('novelai', first), 'existing-fixture-key');
+  assert.equal(await vault.write('novelai', 'existing-fixture-key', first), first);
+  await assert.rejects(vault.write('novelai', 'new-fixture-key', first), /浏览器秘钥存储空间不足或不可用/);
+  assert.deepEqual([...saved.data.entries()], previous);
+});

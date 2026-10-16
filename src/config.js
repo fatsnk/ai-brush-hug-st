@@ -1,4 +1,5 @@
 import { storageKey } from './runtime.js';
+import { readBrowserCache } from './browser-cache.js';
 
 export const STORAGE_KEY = storageKey('tavern-draw-layout-v1');
 export const ACCENTS = ['#2e5fe8', '#1373bc', '#b84568', '#906615'];
@@ -55,7 +56,7 @@ export function normalizeConfig(input = {}) {
 
 export function readConfig() {
   try {
-    return normalizeConfig(JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'));
+    return normalizeConfig(JSON.parse(readBrowserCache(STORAGE_KEY) || '{}'));
   } catch {
     return { ...DEFAULT_CONFIG };
   }

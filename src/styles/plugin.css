@@ -46,6 +46,17 @@
   color: var(--text);
   background: var(--bg);
 }
+.configuration-cache-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 16px;
+  color: var(--warning);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.configuration-cache-status svg { flex: none; width: 16px; height: 16px; margin-top: 2px; }
 :root[data-theme="dark"] {
   --bg: #1b1c20; --surface: #23242b; --soft: #2b2d36;
   --ink: #e7edff; --text: #e8ecf5; --muted: #a2aabc;

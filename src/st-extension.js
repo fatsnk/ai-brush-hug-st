@@ -14,6 +14,7 @@ import { createReleaseMonitor, RELEASE_CACHE_KEY } from './release-monitor.js';
 import { createExtensionUpdater } from './extension-update.js';
 import { createUpdateNotice } from './ui/update-notice.js';
 import { createExtensionAPI, apiError } from './extension-api.js';
+import { getBrowserStorage } from './browser-cache.js';
 
 const VERSION = RELEASE.version;
 const BUILD = RELEASE.build;
@@ -34,10 +35,11 @@ async function start() {
   const profile = await response.json();
   if (typeof profile.handle !== 'string' || !profile.handle) throw new Error('酒馆账号无效');
   const account = profile.handle;
-  const releaseMonitor = createReleaseMonitor({ storage: localStorage });
+  const browserStorage = getBrowserStorage();
+  const releaseMonitor = createReleaseMonitor({ storage: browserStorage });
   const storageRequest = createStorageRequest(() => getContext()?.getRequestHeaders?.(), { account });
   const credentialVault = createCredentialVault({
-    account, storage: localStorage,
+    account, storage: browserStorage,
     request: async (action, body) => {
       const headers = getContext()?.getRequestHeaders?.();
       if (!headers) throw new Error('酒馆请求验证尚未就绪');
@@ -153,7 +155,7 @@ async function start() {
       if (openButton.getClientRects().length) openButton.focus({ preventScroll: true });
     },
   });
-  const updateNotice = createUpdateNotice({ container: shadow, storage: localStorage, account, onOpen: () => open('updates') });
+  const updateNotice = createUpdateNotice({ container: shadow, storage: browserStorage, account, onOpen: () => open('updates') });
   function updateReleaseAppearance() {
     updateNotice.update({ release: releaseMonitor.getState().release, characterTheme: ui.characterTheme,
       theme: layout.theme, hidden: !backdrop.hidden || ui.enabled === false || Boolean(extensionUpdateResult) });
@@ -392,6 +394,8 @@ async function start() {
       );
     }
     else if (data.type === 'linghuashi:error') {
+      clearTimeout(sizeTimer);
+      status.hidden = false;
       status.textContent = typeof data.message === 'string' ? data.message.slice(0, 200) : '界面无法载入';
       rejectFrame?.(new Error(status.textContent));
     }

@@ -1,6 +1,7 @@
 import { createCredentialVault } from './credential-vault.js';
 import { apiError } from './extension-api.js';
 import { createReleaseMonitor } from './release-monitor.js';
+import { getBrowserStorage, readBrowserCache, writeBrowserCache } from './browser-cache.js';
 
 const environment = () => window.__LINGHUASHI_ENV__ || {};
 const secretRequests = new Map();
@@ -37,7 +38,7 @@ window.addEventListener('message', (event) => {
 });
 function previewReleases() {
   if (!previewReleaseMonitor) {
-    previewReleaseMonitor = createReleaseMonitor({ storage: localStorage });
+    previewReleaseMonitor = createReleaseMonitor({ storage: getBrowserStorage() });
     previewReleaseMonitor.subscribe(receiveReleaseState);
   }
   return previewReleaseMonitor;
@@ -171,7 +172,7 @@ export function currentAccount() { return environment().account || 'preview'; }
 
 export function credentialRequest(action, provider, value = {}) {
   if (!isInstalled()) {
-    previewVault ||= createCredentialVault({ account: 'preview', storage: localStorage });
+    previewVault ||= createCredentialVault({ account: 'preview', storage: getBrowserStorage() });
     return action === 'read' ? previewVault.read(provider, value.ref) : previewVault.write(provider, value.key, value.ref);
   }
   return new Promise((resolve, reject) => {
@@ -194,18 +195,22 @@ export function storageKey(name) {
 }
 
 export function readUIState(name) {
-  if (isInstalled()) {
-    const saved = environment().ui || {};
-    try {
-      const local = JSON.parse(localStorage.getItem(storageKey(name)) || '{}');
-      return Number(local.updatedAt) > Number(saved.updatedAt || 0) ? local : saved;
-    } catch { return saved; }
-  }
-  return JSON.parse(localStorage.getItem(storageKey(name)) || '{}');
+  const saved = isInstalled() ? environment().ui || {} : {};
+  try {
+    const local = JSON.parse(readBrowserCache(storageKey(name)) || '{}');
+    if (!local || typeof local !== 'object' || Array.isArray(local)) return saved;
+    return !isInstalled() || Number(local.updatedAt) > Number(saved.updatedAt || 0) ? local : saved;
+  } catch { return saved; }
 }
 
 export function notifyUIState(ui) {
   if (isInstalled()) window.parent.postMessage({ type: 'linghuashi:state', ui }, location.origin);
+}
+
+export function persistUIState(name, ui, serialized = JSON.stringify(ui)) {
+  // Account settings must not depend on the optional browser cache.
+  notifyUIState(ui);
+  return writeBrowserCache(storageKey(name), serialized);
 }
 
 export function currentChat() {
