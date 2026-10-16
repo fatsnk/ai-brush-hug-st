@@ -4,7 +4,7 @@
   "requires": [],
   "optional": [],
   "dependencies": [],
-  "js": "dist/index.js?ver=0.23.0&build=20261016-release-protection-r1",
+  "js": "dist/index.js?ver=0.23.0&build=20261016-release-r2",
   "author": "小波",
   "version": "0.23.0",
   "auto_update": false,

@@ -28,7 +28,7 @@ export const releaseBanner = (vendor = false) =>
   `/*! Linghuashi ${RELEASE.version} | ${vendor ? 'Third-party dependencies.' : 'Copyright (c) 2026 \u5c0f\u6ce2.'}\n`
   + ` * ${vendor ? 'Third-party code: see THIRD-PARTY-NOTICES.txt.' : 'New work: Linghuashi Personal Use and Attribution License 1.0; see LICENSE.'}\n`
   + ' * Legacy BSD and third-party permissions remain applicable; see LICENSES/ and THIRD-PARTY-NOTICES.txt.\n'
-  + ` * Build: ${RELEASE.build}; ${PROTECTION_PROFILE}.\n */\n`;
+  + ` * Build: ${RELEASE.build}.\n */\n`;
 
 export function protectCode(code, name) {
   const seed = Number.parseInt(codeDigest(`${RELEASE.build}:${name}:${PROTECTION_PROFILE}`).slice(0, 8), 16) || 1;

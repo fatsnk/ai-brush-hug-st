@@ -1,64 +1,64 @@
 {
   "version": "0.23.0",
-  "build": "20261016-release-protection-r1",
+  "build": "20261016-release-r2",
   "profile": "light-identifiers-v1",
   "sourceMaps": false,
   "files": [
     {
-      "name": "assets/config-C4NmhegM.js",
+      "name": "assets/config-K4ZID_iE.js",
       "protected": true,
-      "beforeBytes": 26475,
-      "bytes": 41359,
-      "sha256": "42366ef105d117792436d1a76f406c4bbd5cd6d84d0cbb87fabbcd4894c242a9"
+      "beforeBytes": 26464,
+      "bytes": 41260,
+      "sha256": "63e3f7f3fac59c55c6644a8e43fb3a488a63502ae3f9e0e9ca039bfd65243b97"
     },
     {
-      "name": "assets/plugin-DnL-fHnY.js",
+      "name": "assets/plugin-0GEo1rbw.js",
       "protected": true,
-      "beforeBytes": 552567,
-      "bytes": 817856,
-      "sha256": "ae09401592909a0b67f08401abba2e1de5a1dead5779a847a26df54dd4da77c6"
+      "beforeBytes": 552383,
+      "bytes": 817610,
+      "sha256": "470f6f0b5dd39b352c3213175c0f8e39e0667f491025d6d5bf27e89192f528b6"
     },
     {
-      "name": "assets/preload-helper-XWh0egDF.js",
+      "name": "assets/preload-helper-_hMEGRUI.js",
       "protected": true,
       "beforeBytes": 1534,
-      "bytes": 3044,
-      "sha256": "57d3855c5ff5cdc3fc39cbc3db46558515298aa2a201d8c35e2fb50b8afb74f3"
+      "bytes": 3011,
+      "sha256": "f5232c96d96259f18f8593fa35bab5e0c3c8ed7089eb8e256ca28f0d25ed96e0"
     },
     {
-      "name": "assets/rolldown-runtime-Cx38DWnk.js",
+      "name": "assets/rolldown-runtime-VKDMBhoW.js",
       "protected": true,
       "beforeBytes": 1106,
-      "bytes": 2161,
-      "sha256": "41a21875d2233e7e1858ab4601d0deb132d04122bb6e59bd65d6e5b9b7e55a1b"
+      "bytes": 2120,
+      "sha256": "ba6736dfc8d6f9bfb085f510c07eb467ba2e2381e682e078cce3fed04776c185"
     },
     {
-      "name": "assets/ui-CoeZL_8n.js",
+      "name": "assets/ui-B1oD5Osx.js",
       "protected": true,
       "beforeBytes": 3274,
-      "bytes": 4952,
-      "sha256": "eb5f870619b3834dee25c6a84ce1ec16a3ba42b89250565979245c199b9ce167"
+      "bytes": 4919,
+      "sha256": "e7a4aeb4497cc0cf592fe62de7f0bd0f68b2dc7fc61758c52e3f74e2177a608a"
     },
     {
-      "name": "assets/update-mascots-BODDaNTo.js",
+      "name": "assets/update-mascots-DUzUWQ4Z.js",
       "protected": true,
       "beforeBytes": 109246,
-      "bytes": 167361,
-      "sha256": "b23c5cfe6462101298cb805712210c636ca619023384f9ac45c6520e92882834"
+      "bytes": 167360,
+      "sha256": "a1079637893e0f4dae631400e3f9a033b6cf6ce6fee841050aa63af60e9ff302"
     },
     {
-      "name": "assets/vendor-Dmzb7ERF.js",
+      "name": "assets/vendor-GaRfSr3C.js",
       "protected": false,
       "beforeBytes": 111768,
-      "bytes": 112040,
-      "sha256": "4af44a9119c7034101aeba745a33a54fbce7b06587369805840bd767ede7c4e5"
+      "bytes": 112007,
+      "sha256": "55bb06ceb7e3ec69b8a947f51a9d05fb18c7529af850a7eb0815930a3a4cb53d"
     },
     {
       "name": "index.js",
       "protected": true,
       "beforeBytes": 74099,
-      "bytes": 115802,
-      "sha256": "0adf5b5bfaf6e7350459ccf41e711140450c11011135575d6a952f5722465d3e"
+      "bytes": 115767,
+      "sha256": "addd6c8458bcc698676956956fe8c6139c979550dee2d4aeee17eb51649fe1b0"
     }
   ]
 }

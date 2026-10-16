@@ -40,7 +40,7 @@ export async function thirdPartyNotices() {
   const sections = [...packages.values()].sort((a, b) => a.name.localeCompare(b.name) || a.version.localeCompare(b.version));
   return 'Linghuashi third-party notices\n\n'
     + 'Third-party components retain their own licenses. The project license does not restrict their independent use.\n'
-    + 'JSZip is used under its MIT option. Obfuscation and build tools are listed for attribution.\n'
+    + 'JSZip is used under its MIT option. Build tools are listed for attribution.\n'
     + 'Historical project code remains subject to LICENSES/BSD-2-Clause-legacy.txt where applicable.\n\n'
     + sections.map((entry) => `${'='.repeat(72)}\n${entry.name} ${entry.version} (${entry.license})\n\n${entry.texts.join('\n\n')}`).join('\n\n') + '\n';
 }

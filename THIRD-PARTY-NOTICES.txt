@@ -1,7 +1,7 @@
 Linghuashi third-party notices
 
 Third-party components retain their own licenses. The project license does not restrict their independent use.
-JSZip is used under its MIT option. Obfuscation and build tools are listed for attribution.
+JSZip is used under its MIT option. Build tools are listed for attribution.
 Historical project code remains subject to LICENSES/BSD-2-Clause-legacy.txt where applicable.
 
 ========================================================================
