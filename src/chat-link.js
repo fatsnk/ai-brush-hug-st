@@ -28,7 +28,8 @@ export function createChatLink({ account, getContext, settings, send, open, noti
   let destroyed = false;
   let revision = 0;
   let stopped = false;
-  let generating = false;
+  const processor = getContext().streamingProcessor;
+  let generating = processor?.isFinished === false && !processor.isStopped;
   let renderTimer;
   let observer;
   let channel;
@@ -45,6 +46,7 @@ export function createChatLink({ account, getContext, settings, send, open, noti
   const isCurrent = (entry) => bindingIsCurrent(entry, getContext(), settings());
   const scheduledRender = () => {
     clearTimeout(renderTimer);
+    if (destroyed || generating) return;
     renderTimer = setTimeout(() => { void reconcile(); }, 60);
   };
 
@@ -66,9 +68,10 @@ export function createChatLink({ account, getContext, settings, send, open, noti
   }
 
   async function reconcile() {
+    if (destroyed || generating) return;
     const turn = ++revision;
     await ready;
-    if (destroyed || !store) return;
+    if (turn !== revision || destroyed || generating || !store) return;
     const context = getContext();
     const options = settings();
     const chatKey = chatIdentity(context);
@@ -556,8 +559,15 @@ export function createChatLink({ account, getContext, settings, send, open, noti
     const type = context.eventTypes[key];
     if (type) { context.eventSource.on(type, handler); listeners.push([type, handler]); }
   };
-  on('GENERATION_STARTED', (type, _options, dryRun) => { if (!dryRun && type !== 'quiet') { stopped = false; generating = true; } });
-  on('GENERATION_STOPPED', () => { stopped = true; generating = false; pendingReplies.clear(); });
+  on('GENERATION_STARTED', (type, _options, dryRun) => {
+    if (!dryRun && type !== 'quiet') {
+      stopped = false; generating = true;
+      // Tavern owns the message DOM while streaming. Invalidate any in-flight
+      // render so a late storage response cannot replace its text or images.
+      revision++; clearTimeout(renderTimer);
+    }
+  });
+  on('GENERATION_STOPPED', () => { stopped = true; generating = false; pendingReplies.clear(); scheduledRender(); });
   on('GENERATION_ENDED', () => { generating = false; scheduledRender(); });
   on('MESSAGE_RECEIVED', (id, type) => {
     const current = getContext();
@@ -569,7 +579,7 @@ export function createChatLink({ account, getContext, settings, send, open, noti
   });
   for (const key of ['CHAT_CHANGED', 'CHAT_LOADED', 'MESSAGE_UPDATED', 'MESSAGE_SWIPED',
     'MESSAGE_DELETED', 'MORE_MESSAGES_LOADED', 'CHARACTER_MESSAGE_RENDERED',
-    'MESSAGE_SWIPE_DELETED', 'GENERATION_ENDED']) on(key, scheduledRender);
+    'MESSAGE_SWIPE_DELETED']) on(key, scheduledRender);
   const chat = document.getElementById('chat');
   function observeChat() {
     if (chat && !destroyed) observer?.observe(chat, { childList: true, characterData: true, subtree: true });
