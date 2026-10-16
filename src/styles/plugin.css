@@ -296,6 +296,8 @@ button, strong, label { overflow-wrap: anywhere; }
 .plugin-nav > button:hover { background: var(--soft); }
 .plugin-nav > button.active { color: var(--accent); background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); font-weight: 600; }
 .plugin-nav small { margin-left: auto; color: var(--muted); font-size: 10px; }
+.nav-update-alert { display: inline-grid; place-items: center; width: 17px; height: 17px; flex: 0 0 17px; margin-left: auto; border-radius: 50%; background: #d32f43; color: #fff; font-size: 12px; font-weight: 800; line-height: 1; }
+.nav-update-alert[hidden] { display: none; }
 .nav-bottom { display: flex; align-items: center; gap: 6px; padding: 25px 10px 0; margin-top: auto; font-size: 10px; color: var(--muted); }
 .connection-dot { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
 .plugin-content { min-width: 0; min-height: 0; overflow-y: auto; padding: var(--content-padding); }

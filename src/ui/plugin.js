@@ -1748,6 +1748,7 @@ function renderGallery() {
 
 const releasePanel = new ReleasePanel({
   getTheme: () => state.characterTheme,
+  onChange: refreshUpdateNavigation,
   beforeUpdate: async () => {
     await backupPanel.flush();
     await backupPanel.ready();
@@ -1759,6 +1760,21 @@ const releasePanel = new ReleasePanel({
 const changelogPanel = new ChangelogPanel(releasePanel);
 const componentsPanel = new ComponentsPanel();
 
+function refreshUpdateNavigation() {
+  const button = host?.querySelector('.plugin-nav > button[data-page="changelog"]');
+  const badge = button?.querySelector('[data-release-nav-badge]');
+  if (!badge) return;
+  badge.hidden = !releasePanel.hasUpdate;
+  if (releasePanel.hasUpdate) {
+    const description = `发现新版本 v${releasePanel.state.release.version}，点击查看更新动态`;
+    button.title = description;
+    button.setAttribute('aria-description', description);
+  } else {
+    button.removeAttribute('title');
+    button.removeAttribute('aria-description');
+  }
+}
+
 function renderConsole() {
   const renderer = { settings: () => renderSettings(state, backupPanel.html()), assistant: () => renderAssistant(state, assistantUI), generate: renderGenerate, batch: () => workbenchPanel.html() + renderTasks(), connection: renderConnection, characters: renderCharacters, styles: renderStyles, tags: () => tagPanel.html(), gallery: renderGallery, components: () => componentsPanel.html(), changelog: () => changelogPanel.html() }[state.page] || (() => renderSettings(state, backupPanel.html()));
   const navigationPage = state.page === 'batch' ? 'generate' : state.page;
@@ -1767,7 +1783,7 @@ function renderConsole() {
   const sessionCount = isInstalled() ? currentChat().count : 12;
   return `<div class="plugin-shell">
     <header class="plugin-header"><div class="plugin-brand"><span class="brand-mark">${pluginIcon(state.characterTheme)}</span><div class="brand-copy"><strong>${esc(config.name)}</strong><span class="brand-subtitle">一款对萌新友好的生图扩展插件，愿世间充满和平友爱~</span></div></div><div class="plugin-header-right"><span class="session-label">${icon('message-square')}${sessionName}</span>${iconButton('more-horizontal', '更多操作', 'more')}</div></header>
-    <div class="plugin-body"><nav class="plugin-nav" aria-label="插件导航"><span class="nav-caption">工作空间</span>${navigation.map((item) => `<button type="button" data-page="${item.id}" class="${navigationPage === item.id ? 'active' : ''}" aria-current="${navigationPage === item.id ? 'page' : 'false'}">${icon(item.icon)}<span>${item.title}</span>${item.id === 'gallery' ? `<small>${state.history.length}</small>` : ''}</button>`).join('')}<div class="nav-bottom"><span class="connection-dot"></span><span>生图工坊</span><small>${RELEASE.version}</small></div></nav><main class="plugin-content">${renderer()}</main></div>
+    <div class="plugin-body"><nav class="plugin-nav" aria-label="插件导航"><span class="nav-caption">工作空间</span>${navigation.map((item) => `<button type="button" data-page="${item.id}" class="${navigationPage === item.id ? 'active' : ''}" aria-current="${navigationPage === item.id ? 'page' : 'false'}">${icon(item.icon)}<span>${item.title}</span>${item.id === 'gallery' ? `<small>${state.history.length}</small>` : item.id === 'changelog' ? '<span class="nav-update-alert" data-release-nav-badge aria-hidden="true" hidden>!</span>' : ''}</button>`).join('')}<div class="nav-bottom"><span class="connection-dot"></span><span>生图工坊</span><small>${RELEASE.version}</small></div></nav><main class="plugin-content">${renderer()}</main></div>
     <footer class="plugin-bottom"><span>${icon(state.enabled ? 'circle-check' : 'circle')}${!state.enabled ? '插件已关闭' : state.page === 'generate' ? GENERATION_MODES.find((mode) => mode.id === state.provider)?.title || '自定义接口' : '配置已载入'}</span><div class="bottom-actions"><span>当前会话 · ${sessionCount} 条消息</span>${state.page === 'generate' ? button('sparkles', !state.enabled ? '插件已关闭' : busy ? '加入队列' : '生成图像', 'generate', 'primary', !state.enabled ? 'disabled' : '') : ''}</div></footer>
   </div>`;
 }
@@ -1858,6 +1874,7 @@ function render(force = false) {
     floatingMenu.update({ characterTheme: state.characterTheme, theme: config.theme });
   }
   paintIcons();
+  refreshUpdateNavigation();
   advancedPanel.objectInfo = comfyProbe?.objectInfo;
   advancedPanel.bind(host);
   backupPanel.bind(host);
@@ -1914,6 +1931,7 @@ export function showPage(page) {
     return;
   }
   if (!['settings', 'generate', 'batch', 'gallery', 'assistant', 'characters', 'styles', 'tags', 'connection', 'components', 'changelog'].includes(page)) return;
+  if (page === 'changelog' && releasePanel.hasUpdate) releasePanel.open = true;
   state.page = page;
   persist(); render();
   if (page === 'assistant' && state.assistant.source === 'tavern' && isInstalled()) void fetchAssistantModels(false);
@@ -3160,9 +3178,7 @@ export function mountPlugin(root, next) {
         artistDraft(state.artistLibrary.find((entry) => entry.id === artistUI.draft?.id) || state.artistLibrary[0] || null);
         artistUI.dirty = false;
       }
-      state.page = target.dataset.page; persist(); render();
-      if (state.page === 'assistant' && state.assistant.source === 'tavern' && isInstalled()) void fetchAssistantModels(false);
-      if (state.page === 'characters') void refreshProfileCards();
+      showPage(target.dataset.page);
       return;
     }
     if (target.dataset.artistSelect) {

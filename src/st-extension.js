@@ -276,6 +276,7 @@ async function start() {
       requestedPage = null;
     }
     updateAppearance();
+    checkForUpdates();
     shadow.querySelector('[data-action="close"]').focus({ preventScroll: true });
   }
 

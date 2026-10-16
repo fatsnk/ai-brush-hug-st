@@ -4,9 +4,9 @@
   "requires": [],
   "optional": [],
   "dependencies": [],
-  "js": "dist/index.js?ver=0.22.0&build=20261016-native-storage-r1",
+  "js": "dist/index.js?ver=0.22.1&build=20261016-sidebar-update-alert-r1",
   "author": "小波",
-  "version": "0.22.0",
+  "version": "0.22.1",
   "auto_update": false,
   "minimum_client_version": "1.12.13"
 }

@@ -9,8 +9,8 @@ const button = (glyph, label, action, disabled = false, primary = false) =>
   `<button type="button" class="ui-button ${primary ? '' : 'secondary'}" data-release-action="${action}" ${disabled ? 'disabled' : ''}>${icon(glyph)}<span>${label}</span></button>`;
 
 export class ReleasePanel {
-  constructor({ getTheme, beforeUpdate }) {
-    Object.assign(this, { getTheme, beforeUpdate });
+  constructor({ getTheme, beforeUpdate, onChange }) {
+    Object.assign(this, { getTheme, beforeUpdate, onChange });
     this.open = true;
     this.state = getReleaseState();
     this.busy = false;
@@ -18,11 +18,17 @@ export class ReleasePanel {
     this.error = '';
     this.updated = null;
     this.backend = null;
-    subscribeReleaseState((value) => { this.state = value; this.refresh(); });
+    subscribeReleaseState((value) => {
+      const previous = this.state.release;
+      this.state = value;
+      if (this.hasUpdate && (!previous?.newer || previous.version !== value.release.version)) this.open = true;
+      this.refresh();
+    });
   }
+  get hasUpdate() { return Boolean(this.state.release?.newer && !this.updated); }
   html() { return `<details class="settings-band backup-band release-band" data-release-fold ${this.open ? 'open' : ''}>${this.body()}</details>`; }
   body() {
-    const latest = this.state.release, newer = latest?.newer && !this.updated, disabled = this.busy;
+    const latest = this.state.release, newer = this.hasUpdate, disabled = this.busy;
     const theme = this.getTheme();
     return `<summary>${icon('refresh-cw')}<span>版本与更新</span>${newer ? `<span class="release-new">有更新 v${esc(latest.version)}</span>` : ''}${icon('chevron-down')}</summary>
       ${newer ? `<div class="release-announcement"><img src="${updateMascots[theme] || updateMascots.whale}" alt="" width="128" height="128" decoding="async" /><div><strong>插件更新啦！</strong><p>v${esc(RELEASE.version)} ${icon('arrow-right')} v${esc(latest.version)}</p>
@@ -39,13 +45,15 @@ export class ReleasePanel {
       <p class="release-status ${this.error ? 'release-error' : ''}" role="status" aria-live="polite">${esc(this.error || this.message || latest?.message || '尚未检查新版本')}${this.state.error && latest ? ' · 显示上次检查结果' : ''}</p>
       ${this.state.error ? `<p class="backup-status">${esc(this.state.error)}</p>` : ''}
       ${newer ? '<p class="backup-status">更新前请等待任务完成。ZIP 安装请下载前端包手动覆盖；服务器组件需另行更新。</p>' : ''}
-      ${latest?.notes ? `<pre class="backup-notes">${esc(latest.notes)}</pre>` : ''}
+      ${latest?.notes ? `<pre class="backup-notes" aria-label="更新动态">${esc(latest.notes)}</pre>` : ''}
       ${this.state.checkedAt ? `<small>检查时间：${esc(new Date(this.state.checkedAt).toLocaleString('zh-CN', { hour12: false }))}</small>` : ''}`;
   }
   refresh() {
+    this.onChange?.();
     const root = document.querySelector('[data-release-fold]');
     if (!root) return;
     const action = root.contains(document.activeElement) ? document.activeElement.dataset.releaseAction : null;
+    root.open = this.open;
     root.innerHTML = this.body();
     paintIcons(root);
     if (action) root.querySelector(`[data-release-action="${action}"]:not(:disabled)`)?.focus({ preventScroll: true });

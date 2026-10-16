@@ -1,6 +1,6 @@
 export const RELEASE = Object.freeze({
-  version: '0.22.0',
-  build: '20261016-native-storage-r1',
+  version: '0.22.1',
+  build: '20261016-sidebar-update-alert-r1',
   repository: 'ibome/ai-brush-hug-st',
   url: 'https://github.com/ibome/ai-brush-hug-st',
   storageProtocol: 2,
