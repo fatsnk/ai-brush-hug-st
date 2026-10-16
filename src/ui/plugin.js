@@ -17,6 +17,8 @@ import { RELEASE } from '../release.js';
 import { ChangelogPanel } from './changelog.js';
 import { ComponentsPanel } from './components.js';
 import { ReleasePanel } from './release-panel.js';
+import { NetworkDiagnosticPanel } from './network-diagnostics.js';
+import '../styles/network-diagnostics.css';
 import { ReferenceAssets, normalizeReferenceImage, assetBase64 } from '../reference-assets.js';
 import { advancedOf, validateAdvanced, encodeVibe } from '../advanced-generation.js';
 import { prepareAdvancedPayload, finishAdvancedImages } from '../advanced-payload.js';
@@ -341,6 +343,14 @@ function openPromptTools(target, input, visual = false) {
 }
 let keyVisible = false;
 let connectionStatus = { message: '等待输入秘钥', tone: 'neutral' };
+const networkDiagnosticPanel = new NetworkDiagnosticPanel({
+  context: () => ({
+    provider: state.provider, ...state.connections[state.provider], ...credentials[state.provider],
+    endpoint: state.provider === 'openai' ? state.openaiEndpoint : credentials[state.provider].endpoint,
+    path: state.openaiPath, error: connectionStatus.tone === 'error' ? connectionStatus.message : '',
+  }),
+});
+window.addEventListener('pagehide', () => networkDiagnosticPanel.close());
 let resolvedService = null;
 let connectionController;
 let connectionTimer;
@@ -982,7 +992,7 @@ function renderConnection() {
       ${state.provider === 'sdwebui' ? '' : '<p class="credential-status" data-credential-status role="status" aria-live="polite"></p>'}
       ${novelai ? `<div class="connection-help" id="novelai-key-help"><p>支持自动识别官方秘钥(pst-xxxx)和部分第三方秘钥(常用为sk-xxxx)</p><p>支持蛋糕生图、砂糖绘画；砂糖同时支持 STD 开头的秘钥。</p></div>
       <details class="advanced-options endpoint-options" ${addressExpanded ? 'open' : ''}><summary>${icon('link')}第三方接口地址(可选)${icon('chevron-down')}</summary><div>${field('第三方接口地址(可选)', `<input type="url" autocomplete="off" data-transient="endpoint" placeholder="https://第三方域名" value="${esc(current.endpoint)}" />`)}<p class="endpoint-help">留空自动识别；填写后优先用于第三方秘钥。pst- 秘钥始终使用官方接口。</p></div></details>` : ''}
-      <div class="connection-actions" ${openai ? 'data-openai-connection-actions' : ''}><span id="connection-status" data-connection-status role="status" aria-live="polite"></span><div class="connection-buttons">${button('plug', '测试连接', 'test-connection', 'secondary')}</div></div>
+      <div class="connection-actions" ${openai ? 'data-openai-connection-actions' : ''}><span id="connection-status" data-connection-status role="status" aria-live="polite"></span><div class="connection-buttons">${button('scan', '检测当前设备网络', 'network-diagnostics', 'secondary', 'hidden')}${button('plug', '测试连接', 'test-connection', 'secondary')}</div></div>
       <p class="resolved-endpoint" data-resolved-endpoint></p>
       ${advancedPanel.html()}
       ${novelai ? `<div class="section-rule"></div>${renderNovelAIParameters(state, novelaiAdvancedOpen)}` : ''}
@@ -1324,6 +1334,8 @@ function updateConnectionStatus() {
   endpoint.textContent = resolvedService ? `${resolvedService.title} · ${resolvedService.endpoint}` : '';
   endpoint.hidden = !resolvedService;
   host.querySelector('[data-action="test-connection"]').disabled = connectionStatus.tone === 'pending';
+  const diagnostics = host.querySelector('[data-action="network-diagnostics"]');
+  if (diagnostics) diagnostics.hidden = connectionStatus.tone !== 'error';
   const fetchModels = host.querySelector('[data-action="openai-fetch-models"]');
   if (fetchModels) fetchModels.disabled = connectionStatus.tone === 'pending';
 }
@@ -3462,6 +3474,7 @@ export function mountPlugin(root, next) {
       case 'random-seed': state.seed = Math.floor(Math.random() * 1000000000); persist(); render(); break;
       case 'organize': state.prompt = [...new Set(state.prompt.split(',').map((tag) => tag.trim()).filter(Boolean))].join(', '); persist(); render(); toast('提示词已整理'); break;
       case 'test-connection': checkConnection(true); break;
+      case 'network-diagnostics': networkDiagnosticPanel.open(); break;
       case 'save-character':
         try {
           if (!profileUI.draft?.name.trim()) throw new Error('请填写档案名称');
@@ -4019,7 +4032,7 @@ export function mountPlugin(root, next) {
     if (event.target.hasAttribute('data-viewer-compare')) { viewerUI.compareId = event.target.value; showDrawingViewer(); }
   });
   document.addEventListener('keydown', (event) => {
-    if (document.querySelector('.novelai-processing-dialog[open], .tag-picker[open], .profile-ai-dialog[open]')) return;
+    if (document.querySelector('.novelai-processing-dialog[open], .tag-picker[open], .profile-ai-dialog[open], .network-diagnostic-dialog[open]')) return;
     if (event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
     if (document.querySelector('.drawing-viewer') && viewerUI.review && !event.ctrlKey && !event.metaKey && !event.altKey) {
       const rating = ({ '0': 'unrated', '1': 'best', '2': 'usable', '3': 'reject' })[event.key];
