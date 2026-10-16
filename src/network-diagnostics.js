@@ -1,5 +1,5 @@
 import { RELEASE } from './release.js';
-import { NOVELAI_SERVICES, normalizeEndpoint, resolveNovelAIService } from './ui/connection.js';
+import { NOVELAI_SERVICES, NOVELAI_SUBSCRIPTION_URL, normalizeEndpoint, resolveNovelAIService } from './ui/connection.js';
 import { openAIURLs } from './ui/openai.js';
 import { normalizeComfyEndpoint } from './ui/comfyui.js';
 import { sdwebuiBase, sdwebuiHeaders } from './sdwebui.js';
@@ -48,10 +48,10 @@ export function networkDiagnosticPlan(context) {
       if (route.kind === 'resolved') {
         service = route.title;
         if (route.id === 'official') {
-          add('nai-account-public', '官方账号接口 · 普通请求', 'https://api.novelai.net/user/subscription');
-          add('nai-account-auth', '官方账号接口 · 带秘钥请求', 'https://api.novelai.net/user/subscription', headers);
+          add('nai-account-public', '官方订阅接口 · 普通请求', NOVELAI_SUBSCRIPTION_URL);
+          add('nai-account-auth', '官方订阅接口 · 带秘钥请求', NOVELAI_SUBSCRIPTION_URL, headers);
           add('nai-images', '官方图片域名 · 只读访问', `${route.endpoint}/`);
-          note = '图片域名仅检查只读访问；不验证实际生图权限，也不提交生图。';
+          note = '订阅与图片请求使用官方图片服务域名；仅检查只读访问，不验证实际生图权限，也不提交生图。';
         } else if (route.id === 'cake') {
           add('cake-public', '蛋糕模型接口 · 普通请求', `${route.endpoint}/v1/models`);
           add('cake-auth', '蛋糕模型接口 · 带秘钥请求', `${route.endpoint}/v1/models`, headers);
@@ -94,7 +94,7 @@ function environmentInfo(environment, redact) {
   const navigator = environment.navigator || {}, page = environment.location || {};
   const connection = navigator.connection;
   return {
-    page: diagnosticURL(page.origin || page.href), protocol: page.protocol || '', secureContext: Boolean(environment.isSecureContext),
+    page: redact(page.origin || page.href), protocol: page.protocol || '', secureContext: Boolean(environment.isSecureContext),
     online: typeof navigator.onLine === 'boolean' ? navigator.onLine : null,
     userAgent: redact(navigator.userAgent || ''), platform: redact(navigator.platform || ''),
     language: redact(navigator.language || ''),
@@ -115,7 +115,7 @@ function httpHint(status, authenticated) {
 async function networkProbe(target, { fetcher, signal, timeout, environment, redact, opaque = false, policyEvents }) {
   const started = performance.now(), controller = new AbortController();
   const row = { id: target.id + (opaque ? '-opaque' : ''), label: target.label + (opaque ? ' · 不透明响应辅助检查' : ''),
-    url: redact(diagnosticURL(target.url)), hostKind: diagnosticHostKind(new URL(target.url).hostname),
+    url: redact(target.url), hostKind: diagnosticHostKind(new URL(target.url).hostname),
     method: 'GET', mode: opaque ? 'no-cors' : 'cors', authenticated: !opaque && Boolean(target.headers.Authorization) };
   const finish = (outcome, detail, extra = {}) => ({ ...row, outcome, detail, ...extra, durationMs: Math.round(performance.now() - started) });
   const url = new URL(target.url), page = environment.location || {};
@@ -133,14 +133,16 @@ async function networkProbe(target, { fetcher, signal, timeout, environment, red
     if (signal?.aborted) controller.abort();
     const response = await fetcher(target.url, {
       method: 'GET', mode: opaque ? 'no-cors' : 'cors', headers: opaque ? {} : target.headers,
-      credentials: target.sameOrigin ? 'same-origin' : 'omit', referrerPolicy: 'no-referrer', redirect: 'error',
+      credentials: target.sameOrigin ? 'same-origin' : 'omit', referrerPolicy: 'no-referrer',
+      // Fetch rejects no-cors requests unless redirects follow; fallback requests carry no authentication.
+      redirect: opaque ? 'follow' : 'error',
       cache: 'no-store', signal: controller.signal,
     });
     // The report deliberately excludes response bodies, account data and model names.
     void response.body?.cancel().catch(() => {});
     if (signal?.aborted) return finish('cancelled', '检测已取消');
     if (response.type === 'opaque') {
-      return finish('opaque', '收到不透明响应；仅作辅助可达信号，HTTP 状态、跨域与鉴权均未验证', { responseType: 'opaque' });
+      return finish('opaque', '收到不透明响应，可能包含重定向；仅作辅助可达信号，HTTP 状态、跨域与鉴权均未验证', { responseType: 'opaque' });
     }
     return finish('http', httpHint(response.status, row.authenticated), {
       httpStatus: response.status, responseType: redact(response.type || ''),
@@ -179,7 +181,13 @@ export function diagnosticConclusions(report) {
   if (checks.some((row) => ['network-error', 'timeout'].includes(row.outcome))) {
     findings.push('至少一项未取得可读取响应。手机能打开其他外网不代表当前 API 域名已走代理；浏览器无法直接判定 DNS、TLS 或跨域的具体原因。');
   }
-  if (/Android|iPhone|iPad|Mobile/i.test(report.environment.userAgent) && checks.some((row) => row.hostKind === 'loopback')) {
+  if (report.provider === 'novelai' && checks.some((row) => row.id === 'nai-images' && row.outcome === 'http')
+    && checks.some((row) => ['nai-account-public', 'nai-account-auth'].includes(row.id)
+      && ['network-error', 'timeout', 'csp'].includes(row.outcome))) {
+    findings.push('图片域名首页已响应，但订阅路径未取得可读取响应；请核对该路径的代理、跨域或访问限制，首页可达不等于订阅鉴权通过。');
+  }
+  if (/Android|iPhone|iPad|Mobile/i.test(report.environment.userAgent)
+    && checks.some((row) => row.id !== 'tavern-page' && row.hostKind === 'loopback')) {
     findings.push('手机访问 localhost 或 127.0.0.1 指向手机自身，请确认填写的是实际服务地址。');
   }
   if (!findings.length) findings.push(checks.some((row) => row.outcome === 'http')
@@ -194,13 +202,14 @@ export async function runNetworkDiagnostics(context, { fetcher = fetch, signal, 
   const secrets = [context.key, context.username, ...plan.targets.map((target) => target.headers.Authorization),
     ...plan.targets.map((target) => target.headers.Authorization?.split(' ')[1])];
   const redact = diagnosticRedactor(secrets);
+  const authorization = plan.targets.find((target) => target.headers.Authorization)?.headers.Authorization;
   const report = {
     type: 'linghuashi-network-diagnostics', formatVersion: 1, version: RELEASE.version, build: RELEASE.build,
     createdAt: new Date().toISOString(), scope: 'current-browser', provider: context.provider, service: redact(plan.service),
     targetCount: plan.targets.length,
     environment: environmentInfo(environment, redact),
     credential: { present: Boolean(context.key?.trim()), format: /^(pst-|sk-|STD-)/.exec(context.key?.trim() || '')?.[1] || '其他或未填写',
-      authMode: ['basic', 'bearer', 'none'].includes(context.auth) ? context.auth : 'bearer',
+      authMode: authorization?.startsWith('Basic ') ? 'basic' : authorization?.startsWith('Bearer ') ? 'bearer' : 'none',
       containsWhitespace: /\s/.test(context.key?.trim() || ''), containsNonLatin1: /[^\u0000-\u00ff]/.test(context.key || '') },
     previousError: redact(context.error || ''), note: redact(plan.note), status: 'running', checks: [], conclusions: [],
     limits: '仅在当前浏览器执行 GET 只读检查，不提交生图；不记录秘钥、认证头、响应正文、聊天或完整地址路径；日志不会自动发送。',

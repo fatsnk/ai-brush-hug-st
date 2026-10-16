@@ -4,9 +4,9 @@
   "requires": [],
   "optional": [],
   "dependencies": [],
-  "js": "dist/index.js?ver=0.23.2&build=20261016-device-network-r1",
+  "js": "dist/index.js?ver=0.23.3&build=20261016-nai-connection-r1",
   "author": "小波",
-  "version": "0.23.2",
+  "version": "0.23.3",
   "auto_update": false,
   "minimum_client_version": "1.12.13"
 }

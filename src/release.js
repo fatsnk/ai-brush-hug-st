@@ -1,6 +1,6 @@
 export const RELEASE = Object.freeze({
-  version: '0.23.2',
-  build: '20261016-device-network-r1',
+  version: '0.23.3',
+  build: '20261016-nai-connection-r1',
   repository: 'ibome/ai-brush-hug-st',
   url: 'https://github.com/ibome/ai-brush-hug-st',
   storageProtocol: 2,

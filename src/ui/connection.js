@@ -4,6 +4,8 @@ export const NOVELAI_SERVICES = Object.freeze({
   sugar: Object.freeze({ id: 'sugar', title: '砂糖绘画', endpoint: 'https://tang.iisbo.com/novelai' }),
 });
 
+export const NOVELAI_SUBSCRIPTION_URL = `${NOVELAI_SERVICES.official.endpoint}/user/subscription`;
+
 export function normalizeEndpoint(value) {
   const url = new URL(value.trim());
   const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
@@ -52,7 +54,7 @@ async function requestProbe(url, key, { method = 'GET', signal, fetcher = fetch 
 export async function probeService(service, key, options = {}) {
   const sugar = service.id === 'sugar';
   const url = service.id === 'official'
-    ? 'https://api.novelai.net/user/subscription'
+    ? NOVELAI_SUBSCRIPTION_URL
     : `${service.endpoint}${sugar ? '/ai/generate-image' : '/v1/models'}`;
   // Sugar explicitly treats an empty body as a non-billable authentication probe.
   const { response, body } = await requestProbe(url, key, { ...options, method: sugar ? 'POST' : 'GET' });

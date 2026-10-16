@@ -36,7 +36,7 @@ test('all providers use only known read-only routes and keep authentication off 
     }
   }
   assert.deepEqual(networkDiagnosticPlan(official).targets.map((target) => new URL(target.url).hostname),
-    ['api.novelai.net', 'api.novelai.net', 'image.novelai.net']);
+    ['image.novelai.net', 'image.novelai.net', 'image.novelai.net']);
 });
 
 test('reports retain HTTP evidence and timing without reading bodies or claiming generation permission', async () => {
@@ -84,7 +84,12 @@ test('diagnostic logs redact keys, basic credentials, embedded URLs, paths and q
 test('opaque fallback remains inconclusive and never reports status zero as HTTP success', async () => {
   const report = await runNetworkDiagnostics(official, { environment: environment(), fetcher: async (url, options) => {
     if (url.startsWith('https://tavern.test')) return readable();
-    if (options.mode === 'no-cors') return { type: 'opaque', status: 0, body: null };
+    if (options.mode === 'no-cors') {
+      assert.equal(options.redirect, 'follow');
+      assert.equal(options.credentials, 'omit');
+      assert.deepEqual(options.headers, {});
+      return { type: 'opaque', status: 0, body: null };
+    }
     throw new TypeError(`blocked ${key} must never appear`);
   } });
   assert.ok(report.checks.some((row) => row.outcome === 'opaque'));
@@ -178,4 +183,33 @@ test('mobile loopback and offline signals remain hints, and incomplete configura
   const empty = await runNetworkDiagnostics({ provider: 'novelai', key: '' }, { environment: environment(), fetcher: async () => readable() });
   assert.equal(empty.targetCount, 0);
   assert.match(empty.conclusions.join(' '), /配置尚未准备好/);
+});
+
+test('a mobile local tavern is not mistaken for a local provider, and actual NAI authentication is reported', async () => {
+  const report = await runNetworkDiagnostics({ ...official, auth: 'none' }, {
+    environment: environment({ location: {
+      href: 'http://127.0.0.1:8000/private/extension-ui.html?ver=1', origin: 'http://127.0.0.1:8000', protocol: 'http:',
+    } }),
+    fetcher: async () => readable(),
+  });
+  assert.equal(report.credential.authMode, 'bearer');
+  assert.equal(report.environment.page, 'http://[本机地址]:8000/');
+  assert.equal(report.checks[0].url, 'http://[本机地址]:8000/[自定义路径已隐藏]/');
+  assert.doesNotMatch(report.conclusions.join(' '), /手机自身|请确认填写/);
+  assert.doesNotMatch(formatNetworkDiagnostics(report), /127\.0\.0\.1|地址无效/);
+});
+
+test('reachable NAI image index with unreadable subscription paths remains a path-specific failure', async () => {
+  const report = await runNetworkDiagnostics(official, { environment: environment(),
+    fetcher: async (url, options) => {
+      if (url.includes('/user/subscription')) {
+        if (options.mode === 'no-cors') return { type: 'opaque', status: 0, body: null };
+        throw new TypeError('Fixture path failure');
+      }
+      return readable();
+    },
+  });
+  assert.match(report.conclusions.join(' '), /图片域名首页已响应，但订阅路径/);
+  assert.ok(report.checks.some((row) => row.id === 'nai-images' && row.httpStatus === 200));
+  assert.doesNotMatch(report.conclusions.join(' '), /秘钥错误|秘钥无效/);
 });
